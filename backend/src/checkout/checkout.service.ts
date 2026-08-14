@@ -30,7 +30,7 @@ export class CheckoutService {
     const cardPayload = {
       ...commonPayload,
       installments: dto.installments,
-      feePercent: dto.feePercent,
+      feePercent: Math.max(Number(dto.feePercent) || 0.01, 0.01),
       cardNumber: dto.cardNumber,
       cardHolder: dto.cardHolder,
       expiryMonth: dto.expiryMonth,

@@ -513,6 +513,61 @@ p {
   gap: 12px;
 }
 
+.method-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #080d14;
+}
+
+.method-switch button {
+  min-height: 40px;
+  border-radius: 10px;
+  color: var(--muted-strong);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.method-switch button.selected {
+  color: white;
+  background: linear-gradient(135deg, #0969da, var(--accent));
+  box-shadow: 0 10px 24px rgba(22, 131, 255, 0.2);
+}
+
+.payment-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.payment-preview div {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.026);
+}
+
+.payment-preview span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.payment-preview strong {
+  font-size: 18px;
+}
+
 .history-card {
   overflow: hidden;
 }
@@ -603,8 +658,51 @@ p {
   font-size: 17px;
 }
 
+.skeleton-value,
+.skeleton-detail,
+.skeleton-row {
+  overflow: hidden;
+  position: relative;
+  background: #151f2d;
+}
+
+.skeleton-value::after,
+.skeleton-detail::after,
+.skeleton-row::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  animation: shimmer 1.2s infinite;
+}
+
+.skeleton-value {
+  width: 62%;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.skeleton-detail {
+  width: 46%;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.skeleton-row {
+  height: 66px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+}
+
 .spin {
   animation: spin 900ms linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
 }
 
 @keyframes spin {
@@ -660,7 +758,8 @@ p {
   }
 
   .form-grid,
-  .checkout-row {
+  .checkout-row,
+  .payment-preview {
     grid-template-columns: 1fr;
   }
 

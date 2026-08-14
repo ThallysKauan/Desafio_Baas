@@ -77,7 +77,7 @@ function App() {
     amountCents: 1990,
     method: 'PIX',
     installments: 1,
-    feePercent: 0,
+    feePercent: 2.99,
     brand: 'VISA',
     payerDocument: '12345678901',
     cardNumber: '4111111111111111',
@@ -91,6 +91,8 @@ function App() {
   const headers = useMemo(() => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }), [token]);
   const approvedCount = checkouts.filter((item) => item.status === 'APPROVED').length;
   const pendingCount = checkouts.filter((item) => item.status === 'PENDING').length;
+  const checkoutFee = form.method === 'CARD' ? Math.max(Number(form.feePercent) || 0.01, 0.01) : 0;
+  const netAmount = Math.max(Number(form.amountCents) - Math.round(Number(form.amountCents) * (checkoutFee / 100)), 0);
 
   async function request(path: string, options: RequestInit = {}) {
     const response = await fetch(`${apiBase}${path}`, options);
@@ -159,7 +161,7 @@ function App() {
         amountCents: Number(form.amountCents),
         method: form.method,
         installments: form.method === 'CARD' ? Number(form.installments) : undefined,
-        feePercent: form.method === 'CARD' ? Number(form.feePercent) : undefined,
+        feePercent: form.method === 'CARD' ? Math.max(Number(form.feePercent) || 0.01, 0.01) : undefined,
         brand: form.method === 'CARD' ? form.brand : undefined,
         payerDocument: form.method === 'PIX' ? form.payerDocument.replace(/\D/g, '') : undefined,
         cardNumber: form.method === 'CARD' ? form.cardNumber.replace(/\D/g, '') : undefined,
@@ -266,9 +268,9 @@ function App() {
         {message && <div className="notice">{message}</div>}
 
         <section className="metrics-grid">
-          <Metric icon={<Wallet size={22} />} label="Carteira" value={walletValue(wallet)} detail="Saldo do gateway" />
-          <Metric icon={<LinkIcon size={22} />} label="Links" value={String(checkouts.length)} detail={`${pendingCount} pendentes`} />
-          <Metric icon={<CreditCard size={22} />} label="Aprovados" value={String(approvedCount)} detail={`${transactions.length} transacoes`} />
+          <Metric loading={loading && !checkouts.length} icon={<Wallet size={22} />} label="Carteira" value={walletValue(wallet)} detail="Saldo do gateway" />
+          <Metric loading={loading && !checkouts.length} icon={<LinkIcon size={22} />} label="Links" value={String(checkouts.length)} detail={`${pendingCount} pendentes`} />
+          <Metric loading={loading && !checkouts.length} icon={<CreditCard size={22} />} label="Aprovados" value={String(approvedCount)} detail={`${transactions.length} transacoes`} />
         </section>
 
         <section className="performance-card">
@@ -301,17 +303,21 @@ function App() {
               </div>
             </div>
 
+            <div className="method-switch" role="tablist" aria-label="Metodo de pagamento">
+              <button className={form.method === 'PIX' ? 'selected' : ''} onClick={() => setForm({ ...form, method: 'PIX' })}><QrCode size={16} /> Pix</button>
+              <button className={form.method === 'CARD' ? 'selected' : ''} onClick={() => setForm({ ...form, method: 'CARD' })}><CreditCard size={16} /> Cartao</button>
+            </div>
+
             <div className="form-grid">
               <label>Descricao<input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
               <label>Valor em centavos<input type="number" value={form.amountCents} onChange={(e) => setForm({ ...form, amountCents: Number(e.target.value) })} /></label>
-              <label>Metodo<select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}><option>PIX</option><option>CARD</option></select></label>
               {form.method === 'PIX' && (
                 <label>CPF/CNPJ pagador<input value={form.payerDocument} onChange={(e) => setForm({ ...form, payerDocument: e.target.value })} /></label>
               )}
               {form.method === 'CARD' && (
                 <>
                   <label>Parcelas<input type="number" min="1" max="21" value={form.installments} onChange={(e) => setForm({ ...form, installments: Number(e.target.value) })} /></label>
-                  <label>Taxa percentual<input type="number" value={form.feePercent} onChange={(e) => setForm({ ...form, feePercent: Number(e.target.value) })} /></label>
+                  <label>Taxa percentual<input type="number" min="0.01" step="0.01" value={form.feePercent} onChange={(e) => setForm({ ...form, feePercent: Number(e.target.value) })} /></label>
                   <label>Numero do cartao<input value={form.cardNumber} onChange={(e) => setForm({ ...form, cardNumber: e.target.value })} /></label>
                   <label>Nome no cartao<input value={form.cardHolder} onChange={(e) => setForm({ ...form, cardHolder: e.target.value })} /></label>
                   <label>Mes<input value={form.expiryMonth} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value })} /></label>
@@ -321,9 +327,24 @@ function App() {
               )}
             </div>
 
+            <div className="payment-preview">
+              <div>
+                <span>Total da cobranca</span>
+                <strong>{money(Number(form.amountCents))}</strong>
+              </div>
+              <div>
+                <span>Metodo</span>
+                <strong>{form.method}</strong>
+              </div>
+              <div>
+                <span>Liquido estimado</span>
+                <strong>{money(netAmount)}</strong>
+              </div>
+            </div>
+
             <button className="primary-action" onClick={createCheckout} disabled={loading}>
-              <LinkIcon size={18} />
-              Criar link de pagamento
+              {loading ? <Loader2 className="spin" size={18} /> : <LinkIcon size={18} />}
+              {loading ? 'Processando gateway' : 'Criar link de pagamento'}
               <ArrowRight size={18} />
             </button>
           </div>
@@ -351,7 +372,13 @@ function App() {
             <span className="pill">{checkouts.length} registros</span>
           </div>
 
-          {checkouts.length === 0 ? (
+          {loading && checkouts.length === 0 ? (
+            <div className="checkout-list">
+              <div className="skeleton-row"></div>
+              <div className="skeleton-row"></div>
+              <div className="skeleton-row"></div>
+            </div>
+          ) : checkouts.length === 0 ? (
             <div className="empty-state">
               <QrCode size={28} />
               <strong>Nenhum link criado ainda</strong>
@@ -385,13 +412,13 @@ function App() {
   );
 }
 
-function Metric({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) {
+function Metric({ icon, label, value, detail, loading }: { icon: React.ReactNode; label: string; value: string; detail: string; loading?: boolean }) {
   return (
     <article className="metric-card">
       <div className="metric-icon">{icon}</div>
       <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
+      {loading ? <div className="skeleton-value"></div> : <strong>{value}</strong>}
+      {loading ? <div className="skeleton-detail"></div> : <small>{detail}</small>}
     </article>
   );
 }
