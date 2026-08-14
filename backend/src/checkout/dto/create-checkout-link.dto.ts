@@ -31,4 +31,9 @@ export class CreateCheckoutLinkDto {
   @IsOptional()
   @IsString()
   brand?: string;
+
+  @ApiPropertyOptional({ example: '12345678901' })
+  @IsOptional()
+  @IsString()
+  payerDocument?: string;
 }

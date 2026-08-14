@@ -73,7 +73,8 @@ function App() {
     method: 'PIX',
     installments: 1,
     feePercent: 0,
-    brand: 'VISA'
+    brand: 'VISA',
+    payerDocument: '12345678901'
   });
   const [withdrawal, setWithdrawal] = useState({ amountCents: 1000, pixKey: '' });
 
@@ -149,7 +150,8 @@ function App() {
         method: form.method,
         installments: form.method === 'CARD' ? Number(form.installments) : undefined,
         feePercent: form.method === 'CARD' ? Number(form.feePercent) : undefined,
-        brand: form.method === 'CARD' ? form.brand : undefined
+        brand: form.method === 'CARD' ? form.brand : undefined,
+        payerDocument: form.payerDocument.replace(/\D/g, '')
       };
       await request('/checkout-links', { method: 'POST', headers, body: JSON.stringify(payload) });
       setMessage('Link de pagamento criado.');
@@ -287,6 +289,7 @@ function App() {
             <div className="form-grid">
               <label>Descricao<input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
               <label>Valor em centavos<input type="number" value={form.amountCents} onChange={(e) => setForm({ ...form, amountCents: Number(e.target.value) })} /></label>
+              <label>CPF/CNPJ pagador<input value={form.payerDocument} onChange={(e) => setForm({ ...form, payerDocument: e.target.value })} /></label>
               <label>Metodo<select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}><option>PIX</option><option>CARD</option></select></label>
               {form.method === 'CARD' && (
                 <>

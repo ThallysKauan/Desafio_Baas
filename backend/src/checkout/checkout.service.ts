@@ -18,9 +18,9 @@ export class CheckoutService {
     const externalReference = `baas_${randomUUID()}`;
     const gatewayPayload = {
       amount: dto.amountCents,
-      amountCents: dto.amountCents,
       description: dto.description,
       externalReference,
+      payerDocument: dto.payerDocument,
       installments: dto.installments,
       feePercent: dto.feePercent,
       brand: dto.brand
