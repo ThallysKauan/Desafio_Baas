@@ -121,6 +121,13 @@ O painel possui uma area para cadastrar, listar e remover esses callbacks direta
 - O painel consulta o extrato com filtros de status, tipo e limite.
 - Se o token do gateway expirar, o backend realiza um novo login e repete a chamada uma vez.
 
+## Saques
+
+- O painel envia o valor em centavos e a chave Pix para `POST /api/withdrawals`.
+- Cada solicitacao fica persistida no banco proprio com o identificador do gateway.
+- O botao de atualizar consulta `GET /api/withdrawals/:id` e salva o status mais recente.
+- O webhook `WITHDRAWAL` tambem atualiza o status local de forma assincrona.
+
 ## Fluxo Principal
 
 1. Criar conta publica no gateway por `POST /api/users`.

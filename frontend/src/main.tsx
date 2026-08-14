@@ -44,13 +44,14 @@ type Checkout = {
 
 type GatewayTransaction = Record<string, unknown>;
 type GatewayWebhook = { id?: string; event?: string; type?: string; url?: string; active?: boolean };
+type Withdrawal = { id: string; amountCents: number; pixKey: string; status: string; gatewayWithdrawalId?: string; createdAt?: string };
 
 function money(cents?: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
 }
 
 function statusLabel(status?: string) {
-  const value = status || 'PENDING';
+  const value = (status || 'PENDING').toUpperCase();
   const labels: Record<string, string> = {
     PENDING: 'Pendente',
     APPROVED: 'Aprovado',
@@ -102,6 +103,7 @@ function App() {
   const [transactions, setTransactions] = useState<unknown[]>([]);
   const [transactionFilters, setTransactionFilters] = useState({ status: '', type: '', limit: 20 });
   const [webhooks, setWebhooks] = useState<GatewayWebhook[]>([]);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [webhookForm, setWebhookForm] = useState({ event: 'PAYMENT_PIX', url: `${window.location.origin}/api/webhooks/payment-pix` });
   const [feeLoading, setFeeLoading] = useState(false);
   const [form, setForm] = useState({
@@ -177,16 +179,18 @@ function App() {
       const query = new URLSearchParams({ limit: String(transactionFilters.limit) });
       if (transactionFilters.status) query.set('status', transactionFilters.status);
       if (transactionFilters.type) query.set('type', transactionFilters.type);
-      const [checkoutData, walletData, transactionData, webhookData] = await Promise.all([
+      const [checkoutData, walletData, transactionData, webhookData, withdrawalData] = await Promise.all([
         request('/checkout-links', { headers }),
         request('/wallet', { headers }).catch((error) => ({ error: error.message })),
         request(`/wallet/transactions?${query}`, { headers }).catch(() => []),
-        request('/gateway/webhooks', { headers }).catch(() => [])
+        request('/gateway/webhooks', { headers }).catch(() => []),
+        request('/withdrawals', { headers }).catch(() => [])
       ]);
       setCheckouts(checkoutData);
       setWallet(walletData);
       setTransactions(Array.isArray(transactionData) ? transactionData : transactionData.items || []);
       setWebhooks(Array.isArray(webhookData) ? webhookData : webhookData.items || webhookData.webhooks || []);
+      setWithdrawals(Array.isArray(withdrawalData) ? withdrawalData : []);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Erro ao carregar dados');
     } finally {
@@ -265,11 +269,24 @@ function App() {
         body: JSON.stringify({ amountCents: Number(withdrawal.amountCents), pixKey: withdrawal.pixKey })
       });
       setMessage('Saque solicitado.');
+      setWithdrawal((current) => ({ ...current, pixKey: '' }));
+      await loadDashboard();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Erro ao solicitar saque');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function refreshWithdrawal(id: string) {
+    try {
+      setLoading(true);
+      await request(`/withdrawals/${id}`, { headers });
+      setMessage('Status do saque atualizado.');
+      await loadDashboard();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Erro ao consultar saque');
+    } finally { setLoading(false); }
   }
 
   async function copyText(value: string) {
@@ -428,7 +445,7 @@ function App() {
             </button>
           </div>
 
-          <div className="operation-card">
+          <div className="operation-card withdrawal-card">
             <div className="section-heading">
               <span className="icon-chip"><Landmark size={18} /></span>
               <div>
@@ -436,9 +453,15 @@ function App() {
                 <p>Solicita retirada para chave Pix externa.</p>
               </div>
             </div>
-            <label>Valor em centavos<input type="number" value={withdrawal.amountCents} onChange={(e) => setWithdrawal({ ...withdrawal, amountCents: Number(e.target.value) })} /></label>
-            <label>Chave Pix<input value={withdrawal.pixKey} onChange={(e) => setWithdrawal({ ...withdrawal, pixKey: e.target.value })} /></label>
-            <button className="secondary-action fill" onClick={createWithdrawal} disabled={loading}><Banknote size={18} /> Solicitar saque</button>
+            <div className="withdrawal-balance"><span>Valor da retirada</span><strong>{money(withdrawal.amountCents)}</strong><small>Transferencia para chave Pix</small></div>
+            <label>Valor em centavos<input type="number" min="100" step="100" value={withdrawal.amountCents} onChange={(e) => setWithdrawal({ ...withdrawal, amountCents: Number(e.target.value) })} /></label>
+            <label>Chave Pix<input placeholder="CPF, e-mail, telefone ou chave aleatoria" value={withdrawal.pixKey} onChange={(e) => setWithdrawal({ ...withdrawal, pixKey: e.target.value })} /></label>
+            <button className="secondary-action fill" onClick={createWithdrawal} disabled={loading || withdrawal.amountCents < 100 || !withdrawal.pixKey.trim()}><Banknote size={18} /> Solicitar saque</button>
+            <div className="withdrawal-history">
+              <div className="mini-heading"><span>Saques recentes</span><small>{withdrawals.length}</small></div>
+              {withdrawals.slice(0, 3).map((item) => <article key={item.id}><div><strong>{money(item.amountCents)}</strong><small>{item.pixKey}</small></div><span className={`status-badge ${item.status.toLowerCase()}`}>{statusLabel(item.status)}</span><button className="refresh-mini" title="Consultar status" onClick={() => refreshWithdrawal(item.id)}><RefreshCcw size={13}/></button></article>)}
+              {!withdrawals.length && <p>Nenhum saque solicitado.</p>}
+            </div>
           </div>
         </section>
 
@@ -551,7 +574,7 @@ function InteractiveCard({ form, activeField }: { form: { cardNumber: string; ca
 }
 
 function PixOrb({ ready, amount }: { ready: boolean; amount: string }) {
-  return <div className={`pix-visual ${ready ? 'is-ready' : ''}`}><div className="pix-radar"><i></i><i></i><i></i><QrCode size={48} /></div><strong>{amount}</strong><span>{ready ? 'Pronto para gerar' : 'Aguardando dados'}</span></div>;
+  return <div className={`pix-visual ${ready ? 'is-ready' : ''}`}><div className="pix-ticket"><span className="pix-brand"><i></i> PIX</span><div className="pix-qr-preview"><span></span><span></span><span></span><QrCode size={64}/></div><small>Cobranca instantanea</small></div><div className="pix-amount"><span>Valor da cobranca</span><strong>{amount}</strong><small>{ready ? <><Check size={12}/> Dados prontos para gerar</> : 'Complete os dados da cobranca'}</small></div></div>;
 }
 
 function TransactionRow({ transaction }: { transaction: GatewayTransaction }) {
