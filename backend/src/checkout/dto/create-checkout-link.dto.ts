@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
 
 export class CreateCheckoutLinkDto {
   @ApiProperty({ example: 'Pedido camiseta VBA' })
@@ -11,10 +11,6 @@ export class CreateCheckoutLinkDto {
   @IsInt()
   @Min(100)
   amountCents: number;
-
-  @ApiProperty({ example: 'cliente@email.com' })
-  @IsEmail()
-  customerEmail: string;
 
   @ApiProperty({ enum: ['PIX', 'CARD', 'BOTH'] })
   @IsIn(['PIX', 'CARD', 'BOTH'])

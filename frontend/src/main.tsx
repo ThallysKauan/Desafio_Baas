@@ -119,7 +119,6 @@ function App() {
   const [form, setForm] = useState({
     description: 'Pedido teste',
     amountCents: 1990,
-    customerEmail: '',
     method: 'BOTH',
     installments: 1,
     feePercent: 2.49,
@@ -231,7 +230,6 @@ function App() {
       const payload = {
         description: form.description,
         amountCents: Number(form.amountCents),
-        customerEmail: form.customerEmail,
         method: form.method
       };
       const checkout = await request('/checkout-links', { method: 'POST', headers, body: JSON.stringify(payload) });
@@ -382,7 +380,6 @@ function App() {
             <div className="form-grid">
               <label>Descricao<input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
               <label>Valor em centavos<input type="number" value={form.amountCents} onChange={(e) => setForm({ ...form, amountCents: Number(e.target.value) })} /></label>
-              <label className="wide-field">E-mail do cliente<input type="email" placeholder="cliente@email.com" value={form.customerEmail} onChange={(e) => setForm({ ...form, customerEmail: e.target.value })} /></label>
             </div>
 
             <div className="payment-preview">
@@ -402,9 +399,9 @@ function App() {
 
             {createdLink && <div className="created-link"><div><span>Link pronto para compartilhar</span><strong>{createdLink}</strong></div><button className="icon-action" title="Copiar link" onClick={() => copyText(createdLink)}><Copy size={16}/></button><a className="icon-action" href={createdLink} target="_blank" title="Abrir checkout"><ExternalLink size={16}/></a></div>}
 
-            <button className="primary-action" onClick={createCheckout} disabled={loading || form.description.trim().length < 3 || form.amountCents < 100 || !form.customerEmail.includes('@')}>
+            <button className="primary-action" onClick={createCheckout} disabled={loading || form.description.trim().length < 3 || form.amountCents < 100}>
               {loading ? <Loader2 className="spin" size={18} /> : <LinkIcon size={18} />}
-              {loading ? 'Criando checkout' : 'Criar e enviar link de pagamento'}
+              {loading ? 'Criando checkout' : 'Criar link de pagamento'}
               <ArrowRight size={18} />
             </button>
           </div>

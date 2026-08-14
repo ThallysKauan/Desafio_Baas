@@ -24,7 +24,7 @@ export class CheckoutService {
       externalReference,
       description: dto.description,
       amountCents: dto.amountCents,
-      customerEmail: dto.customerEmail,
+      customerEmail: null,
       payerDocument: null,
       method: dto.method,
       status: 'OPEN',
@@ -39,7 +39,6 @@ export class CheckoutService {
     });
 
     await this.checkoutLinks.save(checkout);
-    await this.notifications.sendCheckoutLink(checkout).catch(() => undefined);
     return checkout;
   }
 
