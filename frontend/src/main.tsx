@@ -23,6 +23,8 @@ import {
   Radio,
   Trash2,
   ReceiptText,
+  ExternalLink,
+  AlertCircle,
   Wallet
 } from 'lucide-react';
 import './styles.css';
@@ -33,13 +35,16 @@ type Checkout = {
   id: string;
   description: string;
   amountCents: number;
-  method: 'PIX' | 'CARD';
+  method: 'PIX' | 'CARD' | 'BOTH';
   status: string;
   externalReference: string;
   emv?: string;
   qrCodeBase64?: string;
   installments?: number;
   feePercent?: string;
+  failureReason?: string;
+  attempts?: number;
+  customerEmail?: string;
 };
 
 type GatewayTransaction = Record<string, unknown>;
@@ -54,6 +59,7 @@ function statusLabel(status?: string) {
   const value = (status || 'PENDING').toUpperCase();
   const labels: Record<string, string> = {
     PENDING: 'Pendente',
+    OPEN: 'Aguardando cliente',
     APPROVED: 'Aprovado',
     DENIED: 'Negado',
     EXPIRED: 'Expirado',
@@ -92,6 +98,10 @@ function cardBrand(value: string) {
   return 'CARD';
 }
 
+function checkoutUrl(id: string) {
+  return `${window.location.origin}/checkout/${id}`;
+}
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [email, setEmail] = useState('admin@demo.com');
@@ -105,11 +115,12 @@ function App() {
   const [webhooks, setWebhooks] = useState<GatewayWebhook[]>([]);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [webhookForm, setWebhookForm] = useState({ event: 'PAYMENT_PIX', url: `${window.location.origin}/api/webhooks/payment-pix` });
-  const [feeLoading, setFeeLoading] = useState(false);
+  const [createdLink, setCreatedLink] = useState('');
   const [form, setForm] = useState({
     description: 'Pedido teste',
     amountCents: 1990,
-    method: 'PIX',
+    customerEmail: '',
+    method: 'BOTH',
     installments: 1,
     feePercent: 2.49,
     brand: 'VISA',
@@ -121,16 +132,10 @@ function App() {
     cvv: '123'
   });
   const [withdrawal, setWithdrawal] = useState({ amountCents: 1000, pixKey: '' });
-  const [activeCardField, setActiveCardField] = useState('');
 
   const headers = useMemo(() => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }), [token]);
   const approvedCount = checkouts.filter((item) => item.status === 'APPROVED').length;
   const pendingCount = checkouts.filter((item) => item.status === 'PENDING').length;
-  const checkoutFee = form.method === 'CARD' ? Math.max(Number(form.feePercent) || 0.01, 0.01) : 0;
-  const netAmount = Math.max(Number(form.amountCents) - Math.round(Number(form.amountCents) * (checkoutFee / 100)), 0);
-  const completion = form.method === 'CARD'
-    ? [cardDigits(form.cardNumber).length === 16, form.cardHolder.trim().length >= 3, !!form.expiryMonth, !!form.expiryYear, form.cvv.length >= 3].filter(Boolean).length * 20
-    : [form.description.trim().length >= 3, Number(form.amountCents) > 0, form.payerDocument.replace(/\D/g, '').length >= 11].filter(Boolean).length * (100 / 3);
 
   async function request(path: string, options: RequestInit = {}) {
     const response = await fetch(`${apiBase}${path}`, options);
@@ -198,19 +203,6 @@ function App() {
     }
   }
 
-  async function quoteFee() {
-    if (form.method !== 'CARD') return;
-    try {
-      setFeeLoading(true);
-      const quote = await request(`/checkout-links/fees/quote?brand=${encodeURIComponent(form.brand)}&installments=${form.installments}`, { headers });
-      setForm((current) => ({ ...current, feePercent: Number(quote.feePercent) }));
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Nao foi possivel consultar a taxa');
-    } finally {
-      setFeeLoading(false);
-    }
-  }
-
   async function createGatewayWebhook() {
     try {
       setLoading(true);
@@ -239,18 +231,11 @@ function App() {
       const payload = {
         description: form.description,
         amountCents: Number(form.amountCents),
-        method: form.method,
-        installments: form.method === 'CARD' ? Number(form.installments) : undefined,
-        feePercent: form.method === 'CARD' ? Math.max(Number(form.feePercent) || 0.01, 0.01) : undefined,
-        brand: form.method === 'CARD' ? form.brand : undefined,
-        payerDocument: form.method === 'PIX' ? form.payerDocument.replace(/\D/g, '') : undefined,
-        cardNumber: form.method === 'CARD' ? form.cardNumber.replace(/\D/g, '') : undefined,
-        cardHolder: form.method === 'CARD' ? form.cardHolder : undefined,
-        expiryMonth: form.method === 'CARD' ? form.expiryMonth.padStart(2, '0') : undefined,
-        expiryYear: form.method === 'CARD' ? form.expiryYear : undefined,
-        cvv: form.method === 'CARD' ? form.cvv.replace(/\D/g, '') : undefined
+        customerEmail: form.customerEmail,
+        method: form.method
       };
-      await request('/checkout-links', { method: 'POST', headers, body: JSON.stringify(payload) });
+      const checkout = await request('/checkout-links', { method: 'POST', headers, body: JSON.stringify(payload) });
+      setCreatedLink(checkoutUrl(checkout.id));
       setMessage('Link de pagamento criado.');
       await loadDashboard();
     } catch (error) {
@@ -298,10 +283,6 @@ function App() {
     loadDashboard();
   }, [token]);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => quoteFee(), 350);
-    return () => window.clearTimeout(timer);
-  }, [form.method, form.brand, form.installments]);
 
   if (!token) {
     return (
@@ -384,43 +365,24 @@ function App() {
             </div>
 
             <div className="method-switch" role="tablist" aria-label="Metodo de pagamento">
+              <button className={form.method === 'BOTH' ? 'selected' : ''} onClick={() => setForm({ ...form, method: 'BOTH' })}><Wallet size={16} /> Pix e cartao</button>
               <button className={form.method === 'PIX' ? 'selected' : ''} onClick={() => setForm({ ...form, method: 'PIX' })}><QrCode size={16} /> Pix</button>
               <button className={form.method === 'CARD' ? 'selected' : ''} onClick={() => setForm({ ...form, method: 'CARD' })}><CreditCard size={16} /> Cartao</button>
             </div>
 
-            <div className={`gateway-stage ${form.method.toLowerCase()}`}>
+            <div className="link-builder-stage">
               <div className="stage-copy">
-                <span className="live-status"><i></i> Ambiente seguro</span>
-                <h3>{form.method === 'CARD' ? 'Pagamento por cartao' : 'Pagamento instantaneo'}</h3>
-                <p>{form.method === 'CARD' ? 'Os dados aparecem no cartao enquanto voce digita.' : 'Preencha os dados para preparar uma cobranca Pix.'}</p>
-                <div className="completion-track"><span style={{ transform: `scaleX(${completion / 100})` }} /></div>
-                <small>{Math.round(completion)}% pronto para processar</small>
+                <span className="live-status"><i></i> Checkout hospedado</span>
+                <h3>Crie o link. O cliente conclui.</h3>
+                <p>Os dados de CPF e cartao sao preenchidos pelo pagador em uma pagina publica e segura.</p>
               </div>
-              {form.method === 'CARD' ? (
-                <InteractiveCard form={form} activeField={activeCardField} />
-              ) : (
-                <PixOrb ready={completion >= 99} amount={money(Number(form.amountCents))} />
-              )}
+              <div className="link-builder-visual"><LinkIcon size={28}/><span>checkout seguro</span><strong>{money(Number(form.amountCents))}</strong><small>{form.method === 'BOTH' ? 'Pix ou cartao' : form.method}</small></div>
             </div>
 
             <div className="form-grid">
               <label>Descricao<input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
               <label>Valor em centavos<input type="number" value={form.amountCents} onChange={(e) => setForm({ ...form, amountCents: Number(e.target.value) })} /></label>
-              {form.method === 'PIX' && (
-                <label>CPF/CNPJ pagador<input value={form.payerDocument} onChange={(e) => setForm({ ...form, payerDocument: e.target.value })} /></label>
-              )}
-              {form.method === 'CARD' && (
-                <>
-                  <label>Parcelas<input type="number" min="1" max="21" value={form.installments} onChange={(e) => setForm({ ...form, installments: Number(e.target.value) })} /></label>
-                  <label>Taxa do gateway<input value={feeLoading ? 'Consultando...' : `${form.feePercent}%`} readOnly tabIndex={-1} /></label>
-                  <label className="wide-field">Numero do cartao<input inputMode="numeric" autoComplete="cc-number" value={form.cardNumber.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim()} onFocus={() => setActiveCardField('number')} onBlur={() => setActiveCardField('')} onChange={(e) => { const value = cardDigits(e.target.value); setForm({ ...form, cardNumber: value, brand: cardBrand(value) }); }} /></label>
-                  <label className="wide-field">Nome no cartao<input autoComplete="cc-name" value={form.cardHolder} onFocus={() => setActiveCardField('holder')} onBlur={() => setActiveCardField('')} onChange={(e) => setForm({ ...form, cardHolder: e.target.value.toUpperCase().slice(0, 26) })} /></label>
-                  <label>Mes<input inputMode="numeric" autoComplete="cc-exp-month" value={form.expiryMonth} onFocus={() => setActiveCardField('expiry')} onBlur={() => setActiveCardField('')} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value.replace(/\D/g, '').slice(0, 2) })} /></label>
-                  <label>Ano<input inputMode="numeric" autoComplete="cc-exp-year" value={form.expiryYear} onFocus={() => setActiveCardField('expiry')} onBlur={() => setActiveCardField('')} onChange={(e) => setForm({ ...form, expiryYear: e.target.value.replace(/\D/g, '').slice(0, 4) })} /></label>
-                  <label>CVV<input type="password" inputMode="numeric" autoComplete="cc-csc" value={form.cvv} onFocus={() => setActiveCardField('cvv')} onBlur={() => setActiveCardField('')} onChange={(e) => setForm({ ...form, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })} /></label>
-                  <label>Bandeira detectada<input value={cardBrand(form.cardNumber)} readOnly tabIndex={-1} /></label>
-                </>
-              )}
+              <label className="wide-field">E-mail do cliente<input type="email" placeholder="cliente@email.com" value={form.customerEmail} onChange={(e) => setForm({ ...form, customerEmail: e.target.value })} /></label>
             </div>
 
             <div className="payment-preview">
@@ -430,17 +392,19 @@ function App() {
               </div>
               <div>
                 <span>Metodo</span>
-                <strong>{form.method}</strong>
+                <strong>{form.method === 'BOTH' ? 'Pix + Cartao' : form.method}</strong>
               </div>
               <div>
-                <span>Liquido estimado</span>
-                <strong>{money(netAmount)}</strong>
+                <span>Dados do pagador</span>
+                <strong>No checkout</strong>
               </div>
             </div>
 
-            <button className="primary-action" onClick={createCheckout} disabled={loading}>
+            {createdLink && <div className="created-link"><div><span>Link pronto para compartilhar</span><strong>{createdLink}</strong></div><button className="icon-action" title="Copiar link" onClick={() => copyText(createdLink)}><Copy size={16}/></button><a className="icon-action" href={createdLink} target="_blank" title="Abrir checkout"><ExternalLink size={16}/></a></div>}
+
+            <button className="primary-action" onClick={createCheckout} disabled={loading || form.description.trim().length < 3 || form.amountCents < 100 || !form.customerEmail.includes('@')}>
               {loading ? <Loader2 className="spin" size={18} /> : <LinkIcon size={18} />}
-              {loading ? 'Autorizando no gateway' : `Criar cobranca ${form.method === 'PIX' ? 'Pix' : 'no cartao'}`}
+              {loading ? 'Criando checkout' : 'Criar e enviar link de pagamento'}
               <ArrowRight size={18} />
             </button>
           </div>
@@ -492,18 +456,13 @@ function App() {
                 <article className="checkout-row" key={item.id}>
                   <div className="checkout-main">
                     <strong>{item.description}</strong>
-                    <span>{item.externalReference}</span>
+                    <span>{checkoutUrl(item.id)}</span>
+                    {item.failureReason && <small className="checkout-failure"><AlertCircle size={12}/>{item.failureReason}</small>}
                   </div>
                   <span className="method-badge">{item.method}</span>
                   <span>{money(item.amountCents)}</span>
                   <span className={`status-badge ${item.status.toLowerCase()}`}>{statusLabel(item.status)}</span>
-                  {item.emv && (
-                    <button className="icon-action" title="Copiar codigo Pix" onClick={() => copyText(item.emv || '')}>
-                      <Copy size={16} />
-                    </button>
-                  )}
-                  {item.qrCodeBase64 && <img src={qrCodeSrc(item.qrCodeBase64)} alt="QR Code Pix" />}
-                  {item.emv && <textarea className="pix-code" readOnly value={item.emv} />}
+                  <div className="checkout-actions"><button className="icon-action" title="Copiar link" onClick={() => copyText(checkoutUrl(item.id))}><Copy size={16}/></button><a className="icon-action" title="Abrir checkout" href={checkoutUrl(item.id)} target="_blank"><ExternalLink size={16}/></a></div>
                 </article>
               ))}
             </div>
@@ -557,6 +516,87 @@ function App() {
   );
 }
 
+function PublicCheckout({ id }: { id: string }) {
+  const [checkout, setCheckout] = useState<Checkout | null>(null);
+  const [method, setMethod] = useState<'PIX' | 'CARD'>('PIX');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [activeField, setActiveField] = useState('');
+  const [form, setForm] = useState({ email: '', payerDocument: '', cardNumber: '', cardHolder: '', expiryMonth: '', expiryYear: '', cvv: '', installments: 1 });
+
+  async function loadCheckout() {
+    const response = await fetch(`${apiBase}/checkout-links/${id}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || 'Checkout nao encontrado');
+    setCheckout(data);
+    setForm((current) => ({ ...current, email: current.email || data.customerEmail || '' }));
+    if (data.method === 'CARD') setMethod('CARD');
+    if (data.method === 'PIX') setMethod('PIX');
+    return data as Checkout;
+  }
+
+  useEffect(() => {
+    loadCheckout().catch((reason) => setError(reason.message)).finally(() => setLoading(false));
+  }, [id]);
+
+  async function pay() {
+    try {
+      setLoading(true);
+      setError('');
+      const payload = {
+        method,
+        email: form.email,
+        payerDocument: form.payerDocument.replace(/\D/g, ''),
+        cardNumber: method === 'CARD' ? cardDigits(form.cardNumber) : undefined,
+        cardHolder: method === 'CARD' ? form.cardHolder : undefined,
+        expiryMonth: method === 'CARD' ? form.expiryMonth.padStart(2, '0') : undefined,
+        expiryYear: method === 'CARD' ? form.expiryYear : undefined,
+        cvv: method === 'CARD' ? form.cvv : undefined,
+        installments: method === 'CARD' ? Number(form.installments) : undefined,
+        brand: method === 'CARD' ? cardBrand(form.cardNumber) : undefined
+      };
+      const response = await fetch(`${apiBase}/checkout-links/${id}/pay`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(Array.isArray(data.message) ? data.message.join(', ') : data.message || 'Pagamento nao autorizado');
+      setCheckout(data.checkout);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Pagamento nao autorizado');
+      await loadCheckout().catch(() => undefined);
+    } finally { setLoading(false); }
+  }
+
+  if (loading && !checkout) return <main className="public-checkout-shell"><div className="checkout-loading"><Loader2 className="spin"/><strong>Carregando checkout seguro</strong></div></main>;
+  if (!checkout) return <main className="public-checkout-shell"><div className="checkout-not-found"><AlertCircle/><h1>Link indisponivel</h1><p>{error}</p></div></main>;
+
+  const allowedPix = checkout.method === 'PIX' || checkout.method === 'BOTH';
+  const allowedCard = checkout.method === 'CARD' || checkout.method === 'BOTH';
+  const paid = checkout.status === 'APPROVED';
+  const pixGenerated = method === 'PIX' && checkout.status === 'PENDING' && !!(checkout.emv || checkout.qrCodeBase64);
+  const canPay = form.email.includes('@') && [11, 14].includes(form.payerDocument.replace(/\D/g, '').length) && (method === 'PIX' || (cardDigits(form.cardNumber).length >= 13 && form.cardHolder.length >= 3 && form.expiryMonth.length === 2 && form.expiryYear.length === 4 && form.cvv.length >= 3));
+
+  return <main className="public-checkout-shell">
+    <header className="checkout-brand"><span className="brand-mark"><Sparkles size={18}/></span><strong>StoneVest Checkout</strong><span><LockKeyhole size={14}/> Ambiente seguro</span></header>
+    <section className="public-checkout-card">
+      <aside className="order-summary"><span className="eyebrow">Resumo do pedido</span><h1>{checkout.description}</h1><div className="checkout-total"><span>Total</span><strong>{money(checkout.amountCents)}</strong></div><div className="order-safe"><ShieldCheck size={19}/><div><strong>Pagamento protegido</strong><small>Seus dados seguem direto para o processador.</small></div></div><small className="order-id">Pedido {checkout.id.slice(0, 8)}</small></aside>
+      <section className="customer-payment">
+        {paid ? <div className="payment-result approved-result"><span><Check size={28}/></span><h2>Pagamento aprovado</h2><p>Enviamos a atualizacao para {checkout.customerEmail}.</p></div> : pixGenerated ? <div className="pix-result"><span className="eyebrow">Pix gerado</span><h2>Escaneie para pagar</h2>{checkout.qrCodeBase64 && <img src={qrCodeSrc(checkout.qrCodeBase64)} alt="QR Code Pix"/>}{checkout.emv && <><textarea readOnly value={checkout.emv}/><button className="secondary-action" onClick={() => navigator.clipboard.writeText(checkout.emv || '')}><Copy size={16}/> Copiar codigo Pix</button></>}<p>Esta pagina sera atualizada quando o pagamento for confirmado.</p></div> : <>
+          <div className="checkout-title"><div><span className="eyebrow">Dados do pagamento</span><h2>Como deseja pagar?</h2></div><span className={`status-badge ${checkout.status.toLowerCase()}`}>{statusLabel(checkout.status)}</span></div>
+          {(checkout.failureReason || error) && <div className="decline-notice"><AlertCircle size={19}/><div><strong>Pagamento nao aprovado</strong><p>{checkout.failureReason || error}</p><small>Revise os dados e tente novamente neste mesmo link.</small></div></div>}
+          <div className="method-switch customer-methods">{allowedPix && <button className={method === 'PIX' ? 'selected' : ''} onClick={() => setMethod('PIX')}><QrCode size={17}/> Pix</button>}{allowedCard && <button className={method === 'CARD' ? 'selected' : ''} onClick={() => setMethod('CARD')}><CreditCard size={17}/> Cartao</button>}</div>
+          {method === 'CARD' && <InteractiveCard form={form} activeField={activeField}/>} 
+          <div className="customer-fields">
+            <label>E-mail para notificacoes<input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}/></label>
+            <label>CPF ou CNPJ<input inputMode="numeric" placeholder="Somente numeros" value={form.payerDocument} onChange={(e) => setForm({ ...form, payerDocument: e.target.value.replace(/\D/g, '').slice(0, 14) })}/></label>
+            {method === 'CARD' && <><label className="full-field">Numero do cartao<input inputMode="numeric" value={form.cardNumber.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim()} onFocus={() => setActiveField('number')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cardNumber: cardDigits(e.target.value) })}/></label><label className="full-field">Nome no cartao<input value={form.cardHolder} onFocus={() => setActiveField('holder')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cardHolder: e.target.value.toUpperCase().slice(0, 26) })}/></label><label>Validade (mes)<input inputMode="numeric" placeholder="MM" value={form.expiryMonth} onFocus={() => setActiveField('expiry')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value.replace(/\D/g, '').slice(0, 2) })}/></label><label>Validade (ano)<input inputMode="numeric" placeholder="AAAA" value={form.expiryYear} onFocus={() => setActiveField('expiry')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, expiryYear: e.target.value.replace(/\D/g, '').slice(0, 4) })}/></label><label>CVV<input type="password" inputMode="numeric" value={form.cvv} onFocus={() => setActiveField('cvv')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })}/></label><label>Parcelas<select value={form.installments} onChange={(e) => setForm({ ...form, installments: Number(e.target.value) })}>{Array.from({length: 12},(_,i)=><option value={i+1} key={i+1}>{i+1}x de {money(Math.ceil(checkout.amountCents/(i+1)))}</option>)}</select></label></>}
+          </div>
+          <button className="pay-button" disabled={!canPay || loading} onClick={pay}>{loading ? <Loader2 className="spin" size={18}/> : method === 'PIX' ? <QrCode size={18}/> : <LockKeyhole size={18}/>} {loading ? 'Processando' : method === 'PIX' ? `Gerar Pix de ${money(checkout.amountCents)}` : `Pagar ${money(checkout.amountCents)}`}</button>
+        </>}
+      </section>
+    </section>
+    <footer className="checkout-footer"><ShieldCheck size={14}/> Pagamento processado com conexao segura</footer>
+  </main>;
+}
+
 function InteractiveCard({ form, activeField }: { form: { cardNumber: string; cardHolder: string; expiryMonth: string; expiryYear: string; cvv: string }; activeField: string }) {
   const brand = cardBrand(form.cardNumber);
   return (
@@ -598,4 +638,9 @@ function Metric({ icon, label, value, detail, loading }: { icon: React.ReactNode
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+function Root() {
+  const match = window.location.pathname.match(/^\/checkout\/([^/]+)/);
+  return match ? <PublicCheckout id={match[1]} /> : <App />;
+}
+
+createRoot(document.getElementById('root')!).render(<Root />);

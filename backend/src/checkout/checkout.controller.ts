@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { CheckoutService } from './checkout.service';
 import { CreateCheckoutLinkDto } from './dto/create-checkout-link.dto';
+import { PayCheckoutDto } from './dto/pay-checkout.dto';
 
 @ApiTags('checkout')
 @Controller('checkout-links')
@@ -34,5 +35,10 @@ export class CheckoutController {
   @Get(':id')
   publicCheckout(@Param('id') id: string) {
     return this.checkoutService.findPublic(id);
+  }
+
+  @Post(':id/pay')
+  pay(@Param('id') id: string, @Body() dto: PayCheckoutDto) {
+    return this.checkoutService.pay(id, dto);
   }
 }

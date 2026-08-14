@@ -79,7 +79,15 @@ GATEWAY_DOCUMENT=seu-documento-do-gateway
 GATEWAY_CUSTOMER_CODE=seu-codigo-cliente
 GATEWAY_STORE_KEY=sua-chave-loja
 WEBHOOK_SECRET=
+APP_PUBLIC_URL=https://seu-app.up.railway.app
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=seu-email@gmail.com
+SMTP_PASSWORD=senha-de-app-do-google
+SMTP_FROM=seu-email@gmail.com
 ```
+
+Para Gmail, ative a verificacao em duas etapas na conta Google e crie uma **Senha de app**. Coloque essa senha de 16 caracteres em `SMTP_PASSWORD`; nao use a senha normal da conta.
 
 Se o Railway mostrar variaveis separadas em vez de `MYSQL_URL`, monte a URL assim:
 
