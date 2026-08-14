@@ -17,6 +17,9 @@ import {
   RefreshCcw,
   ShieldCheck,
   Sparkles,
+  Wifi,
+  Check,
+  LockKeyhole,
   Wallet
 } from 'lucide-react';
 import './styles.css';
@@ -63,6 +66,25 @@ function qrCodeSrc(value?: string) {
   return value.startsWith('data:image') ? value : `data:image/png;base64,${value}`;
 }
 
+function cardDigits(value: string) {
+  return value.replace(/\D/g, '').slice(0, 16);
+}
+
+function formattedCardNumber(value: string) {
+  const digits = cardDigits(value);
+  const filled = `${digits}${'•'.repeat(16 - digits.length)}`;
+  return filled.match(/.{1,4}/g)?.join(' ') || '•••• •••• •••• ••••';
+}
+
+function cardBrand(value: string) {
+  const digits = cardDigits(value);
+  if (/^4/.test(digits)) return 'VISA';
+  if (/^(5[1-5]|2[2-7])/.test(digits)) return 'MASTERCARD';
+  if (/^3[47]/.test(digits)) return 'AMEX';
+  if (/^(636368|438935|504175|451416)/.test(digits)) return 'ELO';
+  return 'CARD';
+}
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [email, setEmail] = useState('admin@demo.com');
@@ -87,12 +109,16 @@ function App() {
     cvv: '123'
   });
   const [withdrawal, setWithdrawal] = useState({ amountCents: 1000, pixKey: '' });
+  const [activeCardField, setActiveCardField] = useState('');
 
   const headers = useMemo(() => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }), [token]);
   const approvedCount = checkouts.filter((item) => item.status === 'APPROVED').length;
   const pendingCount = checkouts.filter((item) => item.status === 'PENDING').length;
   const checkoutFee = form.method === 'CARD' ? Math.max(Number(form.feePercent) || 0.01, 0.01) : 0;
   const netAmount = Math.max(Number(form.amountCents) - Math.round(Number(form.amountCents) * (checkoutFee / 100)), 0);
+  const completion = form.method === 'CARD'
+    ? [cardDigits(form.cardNumber).length === 16, form.cardHolder.trim().length >= 3, !!form.expiryMonth, !!form.expiryYear, form.cvv.length >= 3].filter(Boolean).length * 20
+    : [form.description.trim().length >= 3, Number(form.amountCents) > 0, form.payerDocument.replace(/\D/g, '').length >= 11].filter(Boolean).length * (100 / 3);
 
   async function request(path: string, options: RequestInit = {}) {
     const response = await fetch(`${apiBase}${path}`, options);
@@ -265,7 +291,7 @@ function App() {
           </button>
         </header>
 
-        {message && <div className="notice">{message}</div>}
+        {message && <div className="notice"><Check size={16} />{message}</div>}
 
         <section className="metrics-grid">
           <Metric loading={loading && !checkouts.length} icon={<Wallet size={22} />} label="Carteira" value={walletValue(wallet)} detail="Saldo do gateway" />
@@ -293,7 +319,7 @@ function App() {
           </div>
         </section>
 
-        <section className="operations-grid">
+        <section className="operations-grid checkout-studio">
           <div className="operation-card main-operation">
             <div className="section-heading">
               <span className="icon-chip"><QrCode size={18} /></span>
@@ -308,6 +334,21 @@ function App() {
               <button className={form.method === 'CARD' ? 'selected' : ''} onClick={() => setForm({ ...form, method: 'CARD' })}><CreditCard size={16} /> Cartao</button>
             </div>
 
+            <div className={`gateway-stage ${form.method.toLowerCase()}`}>
+              <div className="stage-copy">
+                <span className="live-status"><i></i> Ambiente seguro</span>
+                <h3>{form.method === 'CARD' ? 'Pagamento por cartao' : 'Pagamento instantaneo'}</h3>
+                <p>{form.method === 'CARD' ? 'Os dados aparecem no cartao enquanto voce digita.' : 'Preencha os dados para preparar uma cobranca Pix.'}</p>
+                <div className="completion-track"><span style={{ transform: `scaleX(${completion / 100})` }} /></div>
+                <small>{Math.round(completion)}% pronto para processar</small>
+              </div>
+              {form.method === 'CARD' ? (
+                <InteractiveCard form={form} activeField={activeCardField} />
+              ) : (
+                <PixOrb ready={completion >= 99} amount={money(Number(form.amountCents))} />
+              )}
+            </div>
+
             <div className="form-grid">
               <label>Descricao<input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
               <label>Valor em centavos<input type="number" value={form.amountCents} onChange={(e) => setForm({ ...form, amountCents: Number(e.target.value) })} /></label>
@@ -318,12 +359,12 @@ function App() {
                 <>
                   <label>Parcelas<input type="number" min="1" max="21" value={form.installments} onChange={(e) => setForm({ ...form, installments: Number(e.target.value) })} /></label>
                   <label>Taxa percentual<input type="number" min="0.01" step="0.01" value={form.feePercent} onChange={(e) => setForm({ ...form, feePercent: Number(e.target.value) })} /></label>
-                  <label>Bandeira<input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value.toUpperCase() })} /></label>
-                  <label>Numero do cartao<input value={form.cardNumber} onChange={(e) => setForm({ ...form, cardNumber: e.target.value })} /></label>
-                  <label>Nome no cartao<input value={form.cardHolder} onChange={(e) => setForm({ ...form, cardHolder: e.target.value })} /></label>
-                  <label>Mes<input value={form.expiryMonth} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value })} /></label>
-                  <label>Ano<input value={form.expiryYear} onChange={(e) => setForm({ ...form, expiryYear: e.target.value })} /></label>
-                  <label>CVV<input value={form.cvv} onChange={(e) => setForm({ ...form, cvv: e.target.value })} /></label>
+                  <label className="wide-field">Numero do cartao<input inputMode="numeric" autoComplete="cc-number" value={form.cardNumber.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim()} onFocus={() => setActiveCardField('number')} onBlur={() => setActiveCardField('')} onChange={(e) => { const value = cardDigits(e.target.value); setForm({ ...form, cardNumber: value, brand: cardBrand(value) }); }} /></label>
+                  <label className="wide-field">Nome no cartao<input autoComplete="cc-name" value={form.cardHolder} onFocus={() => setActiveCardField('holder')} onBlur={() => setActiveCardField('')} onChange={(e) => setForm({ ...form, cardHolder: e.target.value.toUpperCase().slice(0, 26) })} /></label>
+                  <label>Mes<input inputMode="numeric" autoComplete="cc-exp-month" value={form.expiryMonth} onFocus={() => setActiveCardField('expiry')} onBlur={() => setActiveCardField('')} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value.replace(/\D/g, '').slice(0, 2) })} /></label>
+                  <label>Ano<input inputMode="numeric" autoComplete="cc-exp-year" value={form.expiryYear} onFocus={() => setActiveCardField('expiry')} onBlur={() => setActiveCardField('')} onChange={(e) => setForm({ ...form, expiryYear: e.target.value.replace(/\D/g, '').slice(0, 4) })} /></label>
+                  <label>CVV<input type="password" inputMode="numeric" autoComplete="cc-csc" value={form.cvv} onFocus={() => setActiveCardField('cvv')} onBlur={() => setActiveCardField('')} onChange={(e) => setForm({ ...form, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })} /></label>
+                  <label>Bandeira detectada<input value={cardBrand(form.cardNumber)} readOnly tabIndex={-1} /></label>
                 </>
               )}
             </div>
@@ -345,7 +386,7 @@ function App() {
 
             <button className="primary-action" onClick={createCheckout} disabled={loading}>
               {loading ? <Loader2 className="spin" size={18} /> : <LinkIcon size={18} />}
-              {loading ? 'Processando gateway' : 'Criar link de pagamento'}
+              {loading ? 'Autorizando no gateway' : `Criar cobranca ${form.method === 'PIX' ? 'Pix' : 'no cartao'}`}
               <ArrowRight size={18} />
             </button>
           </div>
@@ -409,8 +450,29 @@ function App() {
           )}
         </section>
       </section>
+      {loading && <div className="gateway-loader" role="status"><div className="loader-core"><span></span><LockKeyhole size={24} /></div><strong>Conectando ao gateway</strong><small>Criptografando e validando a transacao</small></div>}
     </main>
   );
+}
+
+function InteractiveCard({ form, activeField }: { form: { cardNumber: string; cardHolder: string; expiryMonth: string; expiryYear: string; cvv: string }; activeField: string }) {
+  const brand = cardBrand(form.cardNumber);
+  return (
+    <div className={`card-scene ${activeField === 'cvv' ? 'is-flipped' : ''}`}>
+      <div className="bank-card">
+        <div className="card-face card-front">
+          <div className="card-top"><span className="card-chip"><i></i><i></i><i></i></span><Wifi size={23} /></div>
+          <strong className={`live-card-number ${activeField === 'number' ? 'field-active' : ''}`}>{formattedCardNumber(form.cardNumber)}</strong>
+          <div className="card-meta"><div><small>Titular</small><span className={activeField === 'holder' ? 'field-active' : ''}>{form.cardHolder || 'SEU NOME AQUI'}</span></div><div><small>Validade</small><span className={activeField === 'expiry' ? 'field-active' : ''}>{form.expiryMonth || 'MM'}/{form.expiryYear.slice(-2) || 'AA'}</span></div><b>{brand}</b></div>
+        </div>
+        <div className="card-face card-back"><div className="magnetic-strip"></div><div className="signature"><span>assinatura autorizada</span><b>{form.cvv ? '•'.repeat(form.cvv.length) : 'CVV'}</b></div><p><LockKeyhole size={13} /> Dados protegidos por criptografia</p></div>
+      </div>
+    </div>
+  );
+}
+
+function PixOrb({ ready, amount }: { ready: boolean; amount: string }) {
+  return <div className={`pix-visual ${ready ? 'is-ready' : ''}`}><div className="pix-radar"><i></i><i></i><i></i><QrCode size={48} /></div><strong>{amount}</strong><span>{ready ? 'Pronto para gerar' : 'Aguardando dados'}</span></div>;
 }
 
 function Metric({ icon, label, value, detail, loading }: { icon: React.ReactNode; label: string; value: string; detail: string; loading?: boolean }) {
