@@ -24,6 +24,13 @@ export class CheckoutController {
     return this.checkoutService.list(user.id, status);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('fees/quote')
+  quoteFee(@Query('brand') brand = 'VISA', @Query('installments') installments = '1') {
+    return this.checkoutService.quoteFee(brand, Number(installments));
+  }
+
   @Get(':id')
   publicCheckout(@Param('id') id: string) {
     return this.checkoutService.findPublic(id);

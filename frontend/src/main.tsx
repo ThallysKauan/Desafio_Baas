@@ -20,6 +20,10 @@ import {
   Wifi,
   Check,
   LockKeyhole,
+  Filter,
+  Radio,
+  Trash2,
+  ReceiptText,
   Wallet
 } from 'lucide-react';
 import './styles.css';
@@ -38,6 +42,9 @@ type Checkout = {
   installments?: number;
   feePercent?: string;
 };
+
+type GatewayTransaction = Record<string, unknown>;
+type GatewayWebhook = { id?: string; event?: string; type?: string; url?: string; active?: boolean };
 
 function money(cents?: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
@@ -94,6 +101,10 @@ function App() {
   const [checkouts, setCheckouts] = useState<Checkout[]>([]);
   const [wallet, setWallet] = useState<Record<string, unknown> | null>(null);
   const [transactions, setTransactions] = useState<unknown[]>([]);
+  const [transactionFilters, setTransactionFilters] = useState({ status: '', type: '', limit: 20 });
+  const [webhooks, setWebhooks] = useState<GatewayWebhook[]>([]);
+  const [webhookForm, setWebhookForm] = useState({ event: 'PAYMENT_PIX', url: `${window.location.origin}/api/webhooks/payment-pix` });
+  const [feeLoading, setFeeLoading] = useState(false);
   const [form, setForm] = useState({
     description: 'Pedido teste',
     amountCents: 1990,
@@ -164,19 +175,59 @@ function App() {
     if (!token) return;
     try {
       setLoading(true);
-      const [checkoutData, walletData, transactionData] = await Promise.all([
+      const query = new URLSearchParams({ limit: String(transactionFilters.limit) });
+      if (transactionFilters.status) query.set('status', transactionFilters.status);
+      if (transactionFilters.type) query.set('type', transactionFilters.type);
+      const [checkoutData, walletData, transactionData, webhookData] = await Promise.all([
         request('/checkout-links', { headers }),
         request('/wallet', { headers }).catch((error) => ({ error: error.message })),
-        request('/wallet/transactions?limit=20', { headers }).catch(() => [])
+        request(`/wallet/transactions?${query}`, { headers }).catch(() => []),
+        request('/gateway/webhooks', { headers }).catch(() => [])
       ]);
       setCheckouts(checkoutData);
       setWallet(walletData);
       setTransactions(Array.isArray(transactionData) ? transactionData : transactionData.items || []);
+      setWebhooks(Array.isArray(webhookData) ? webhookData : webhookData.items || webhookData.webhooks || []);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function quoteFee() {
+    if (form.method !== 'CARD') return;
+    try {
+      setFeeLoading(true);
+      const quote = await request(`/checkout-links/fees/quote?brand=${encodeURIComponent(form.brand)}&installments=${form.installments}`, { headers });
+      setForm((current) => ({ ...current, feePercent: Number(quote.feePercent) }));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Nao foi possivel consultar a taxa');
+    } finally {
+      setFeeLoading(false);
+    }
+  }
+
+  async function createGatewayWebhook() {
+    try {
+      setLoading(true);
+      await request('/gateway/webhooks', { method: 'POST', headers, body: JSON.stringify(webhookForm) });
+      setMessage('Webhook cadastrado no gateway.');
+      await loadDashboard();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Erro ao cadastrar webhook');
+    } finally { setLoading(false); }
+  }
+
+  async function deleteGatewayWebhook(id: string) {
+    try {
+      setLoading(true);
+      await request(`/gateway/webhooks/${id}`, { method: 'DELETE', headers });
+      setMessage('Webhook removido.');
+      await loadDashboard();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Erro ao remover webhook');
+    } finally { setLoading(false); }
   }
 
   async function createCheckout() {
@@ -231,6 +282,11 @@ function App() {
     loadDashboard();
   }, [token]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => quoteFee(), 350);
+    return () => window.clearTimeout(timer);
+  }, [form.method, form.brand, form.installments]);
+
   if (!token) {
     return (
       <main className="auth-shell">
@@ -272,18 +328,20 @@ function App() {
           <span>StoneVest BaaS</span>
         </div>
         <nav>
-          <a className="active"><Wallet size={18} /> Dashboard</a>
+          <a className="active" href="#overview"><Wallet size={18} /> Visao geral</a>
+          <a href="#checkout"><CreditCard size={18} /> Pagamentos</a>
+          <a href="#transactions"><ReceiptText size={18} /> Transacoes</a>
+          <a href="#webhooks"><Radio size={18} /> Webhooks</a>
           <a href="/docs"><Activity size={18} /> API Docs</a>
-          <a><ShieldCheck size={18} /> Webhooks</a>
         </nav>
         <button className="quiet-action" onClick={logout}><LogOut size={17} /> Sair</button>
       </aside>
 
-      <section className="workspace">
+      <section className="workspace" id="overview">
         <header className="topbar">
           <div>
             <span className="eyebrow">Gateway Lera Box</span>
-            <h1>Welcome, Merchant</h1>
+            <h1>Central de pagamentos</h1>
           </div>
           <button className="secondary-action" onClick={loadDashboard} disabled={loading}>
             {loading ? <Loader2 className="spin" size={18} /> : <RefreshCcw size={18} />}
@@ -319,7 +377,7 @@ function App() {
           </div>
         </section>
 
-        <section className="operations-grid checkout-studio">
+        <section className="operations-grid checkout-studio" id="checkout">
           <div className="operation-card main-operation">
             <div className="section-heading">
               <span className="icon-chip"><QrCode size={18} /></span>
@@ -358,7 +416,7 @@ function App() {
               {form.method === 'CARD' && (
                 <>
                   <label>Parcelas<input type="number" min="1" max="21" value={form.installments} onChange={(e) => setForm({ ...form, installments: Number(e.target.value) })} /></label>
-                  <label>Taxa percentual<input type="number" min="0.01" step="0.01" value={form.feePercent} onChange={(e) => setForm({ ...form, feePercent: Number(e.target.value) })} /></label>
+                  <label>Taxa do gateway<input value={feeLoading ? 'Consultando...' : `${form.feePercent}%`} readOnly tabIndex={-1} /></label>
                   <label className="wide-field">Numero do cartao<input inputMode="numeric" autoComplete="cc-number" value={form.cardNumber.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim()} onFocus={() => setActiveCardField('number')} onBlur={() => setActiveCardField('')} onChange={(e) => { const value = cardDigits(e.target.value); setForm({ ...form, cardNumber: value, brand: cardBrand(value) }); }} /></label>
                   <label className="wide-field">Nome no cartao<input autoComplete="cc-name" value={form.cardHolder} onFocus={() => setActiveCardField('holder')} onBlur={() => setActiveCardField('')} onChange={(e) => setForm({ ...form, cardHolder: e.target.value.toUpperCase().slice(0, 26) })} /></label>
                   <label>Mes<input inputMode="numeric" autoComplete="cc-exp-month" value={form.expiryMonth} onFocus={() => setActiveCardField('expiry')} onBlur={() => setActiveCardField('')} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value.replace(/\D/g, '').slice(0, 2) })} /></label>
@@ -449,6 +507,48 @@ function App() {
             </div>
           )}
         </section>
+
+        <section className="history-card ledger-card" id="transactions">
+          <div className="history-head ledger-head">
+            <div>
+              <span className="eyebrow">Fluxo financeiro</span>
+              <h2>Extrato do gateway</h2>
+            </div>
+            <div className="ledger-filters">
+              <label><Filter size={14} /> Status
+                <select value={transactionFilters.status} onChange={(e) => setTransactionFilters({ ...transactionFilters, status: e.target.value })}>
+                  <option value="">Todos</option><option value="APPROVED">Aprovados</option><option value="DENIED">Negados</option><option value="EXPIRED">Expirados</option><option value="CANCELLED">Cancelados</option><option value="PENDING">Pendentes</option>
+                </select>
+              </label>
+              <label>Tipo<select value={transactionFilters.type} onChange={(e) => setTransactionFilters({ ...transactionFilters, type: e.target.value })}><option value="">Todos</option><option value="PIX">Pix</option><option value="CARD">Cartao</option><option value="WITHDRAWAL">Saque</option></select></label>
+              <label>Limite<select value={transactionFilters.limit} onChange={(e) => setTransactionFilters({ ...transactionFilters, limit: Number(e.target.value) })}><option value="10">10</option><option value="20">20</option><option value="50">50</option></select></label>
+              <button className="secondary-action" onClick={loadDashboard}><RefreshCcw size={16} /> Aplicar</button>
+            </div>
+          </div>
+          {transactions.length ? <div className="ledger-table">
+            <div className="ledger-row ledger-labels"><span>Transacao</span><span>Tipo</span><span>Data</span><span>Status</span><span>Valor</span></div>
+            {(transactions as GatewayTransaction[]).map((transaction, index) => <TransactionRow key={String(transaction.id ?? index)} transaction={transaction} />)}
+          </div> : <div className="empty-state compact"><ReceiptText size={25} /><strong>Nenhuma transacao neste filtro</strong><span>Altere os filtros ou processe uma nova cobranca.</span></div>}
+        </section>
+
+        <section className="webhook-console" id="webhooks">
+          <div className="webhook-intro">
+            <span className="eyebrow">Eventos assincronos</span>
+            <h2>Webhooks do gateway</h2>
+            <p>Cadastre callbacks para receber o resultado definitivo de pagamentos e saques.</p>
+            <div className="signal-visual"><span></span><span></span><span></span><Radio size={26} /></div>
+          </div>
+          <div className="webhook-manager">
+            <div className="webhook-form">
+              <label>Evento<select value={webhookForm.event} onChange={(e) => { const event = e.target.value; const slug = event === 'PAYMENT_PIX' ? 'payment-pix' : event === 'PAYMENT_CARD' ? 'payment-card' : 'withdrawal'; setWebhookForm({ event, url: `${window.location.origin}/api/webhooks/${slug}` }); }}><option>PAYMENT_PIX</option><option>PAYMENT_CARD</option><option>WITHDRAWAL</option></select></label>
+              <label className="webhook-url">URL publica<input value={webhookForm.url} onChange={(e) => setWebhookForm({ ...webhookForm, url: e.target.value })} /></label>
+              <button className="primary-action" onClick={createGatewayWebhook} disabled={loading}><Radio size={17} /> Cadastrar</button>
+            </div>
+            <div className="webhook-list">
+              {webhooks.length ? webhooks.map((webhook, index) => <article className="webhook-item" key={webhook.id || index}><span className="webhook-signal"></span><div><strong>{webhook.event || webhook.type || 'EVENTO'}</strong><small>{webhook.url || 'URL registrada no gateway'}</small></div><span className="webhook-active">Ativo</span>{webhook.id && <button className="icon-action danger-action" title="Remover webhook" onClick={() => deleteGatewayWebhook(webhook.id || '')}><Trash2 size={15} /></button>}</article>) : <div className="empty-webhooks"><Radio size={20} /><span>Nenhum callback cadastrado no gateway.</span></div>}
+            </div>
+          </div>
+        </section>
       </section>
       {loading && <div className="gateway-loader" role="status"><div className="loader-core"><span></span><LockKeyhole size={24} /></div><strong>Conectando ao gateway</strong><small>Criptografando e validando a transacao</small></div>}
     </main>
@@ -473,6 +573,16 @@ function InteractiveCard({ form, activeField }: { form: { cardNumber: string; ca
 
 function PixOrb({ ready, amount }: { ready: boolean; amount: string }) {
   return <div className={`pix-visual ${ready ? 'is-ready' : ''}`}><div className="pix-radar"><i></i><i></i><i></i><QrCode size={48} /></div><strong>{amount}</strong><span>{ready ? 'Pronto para gerar' : 'Aguardando dados'}</span></div>;
+}
+
+function TransactionRow({ transaction }: { transaction: GatewayTransaction }) {
+  const status = String(transaction.status ?? 'PENDING');
+  const type = String(transaction.type ?? transaction.method ?? transaction.paymentMethod ?? 'TRANSACTION');
+  const description = String(transaction.description ?? transaction.externalReference ?? transaction.id ?? 'Operacao do gateway');
+  const rawAmount = Number(transaction.amountCents ?? transaction.amount ?? transaction.value ?? 0);
+  const dateValue = transaction.createdAt ?? transaction.created_at ?? transaction.date;
+  const date = dateValue ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(String(dateValue))) : '--';
+  return <article className="ledger-row"><span className="transaction-name"><i className={type.toLowerCase()}>{type === 'PIX' ? <QrCode size={15} /> : type === 'CARD' ? <CreditCard size={15} /> : <Banknote size={15} />}</i><strong>{description}</strong></span><span>{type}</span><span>{date}</span><span className={`status-badge ${status.toLowerCase()}`}>{statusLabel(status)}</span><strong>{money(rawAmount)}</strong></article>;
 }
 
 function Metric({ icon, label, value, detail, loading }: { icon: React.ReactNode; label: string; value: string; detail: string; loading?: boolean }) {

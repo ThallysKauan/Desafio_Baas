@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
@@ -29,9 +29,10 @@ export class CheckoutService {
 
     const installments = Number(dto.installments) || 1;
     const brand = (dto.brand || 'VISA').toUpperCase();
-    const feePercent = brand === 'VISA' && installments === 1
-      ? 2.49
-      : Math.max(Number(dto.feePercent) || 0.01, 0.01);
+    const fees = dto.method === 'CARD' ? await this.gateway.getFees(brand) : null;
+    const feePercent = dto.method === 'CARD'
+      ? this.findFeePercent(fees, brand, installments)
+      : 0;
 
     const cardPayload = {
       ...commonPayload,
@@ -70,8 +71,8 @@ export class CheckoutService {
       description: dto.description,
       amountCents: dto.amountCents,
       method: dto.method,
-      installments: dto.installments,
-      feePercent: dto.feePercent?.toString() ?? null,
+      installments: dto.method === 'CARD' ? installments : null,
+      feePercent: dto.method === 'CARD' ? feePercent.toString() : null,
       gatewayPaymentId: gatewayPaymentId ? String(gatewayPaymentId) : null,
       qrCodeBase64: qrCodeBase64 ? String(qrCodeBase64) : null,
       emv: emv ? String(emv) : null
@@ -89,6 +90,16 @@ export class CheckoutService {
     });
   }
 
+  async quoteFee(brand: string, installments: number) {
+    const normalizedBrand = brand.toUpperCase();
+    const fees = await this.gateway.getFees(normalizedBrand);
+    return {
+      brand: normalizedBrand,
+      installments,
+      feePercent: this.findFeePercent(fees, normalizedBrand, installments)
+    };
+  }
+
   async findPublic(id: string) {
     const checkout = await this.checkoutLinks.findOne({ where: { id } });
     if (!checkout) {
@@ -104,5 +115,29 @@ export class CheckoutService {
     }
     checkout.status = status as never;
     return this.checkoutLinks.save(checkout);
+  }
+
+  private findFeePercent(data: unknown, brand: string, installments: number): number {
+    const candidates: Record<string, unknown>[] = [];
+    const visit = (value: unknown) => {
+      if (Array.isArray(value)) return value.forEach(visit);
+      if (!value || typeof value !== 'object') return;
+      const item = value as Record<string, unknown>;
+      candidates.push(item);
+      Object.values(item).forEach(visit);
+    };
+    visit(data);
+
+    const match = candidates.find((item) => {
+      const itemBrand = String(item.brand ?? item.bandeira ?? item.cardBrand ?? '').toUpperCase();
+      const itemInstallments = Number(item.installments ?? item.parcelas ?? item.installment ?? item.number);
+      return (!itemBrand || itemBrand === brand) && itemInstallments === installments;
+    });
+    const value = match?.feePercent ?? match?.percent ?? match?.fee ?? match?.taxa ?? match?.percentage;
+    const fee = Number(value);
+    if (!Number.isFinite(fee) || fee <= 0) {
+      throw new BadGatewayException(`Taxa não encontrada para ${brand} em ${installments}x`);
+    }
+    return fee;
   }
 }

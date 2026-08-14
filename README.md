@@ -112,6 +112,15 @@ POST https://seu-app.up.railway.app/api/webhooks/payment-card
 POST https://seu-app.up.railway.app/api/webhooks/withdrawal
 ```
 
+O painel possui uma area para cadastrar, listar e remover esses callbacks diretamente no gateway. Os eventos recebidos sao persistidos com uma chave idempotente, portanto uma mesma notificacao repetida nao altera o pedido duas vezes.
+
+## Taxas e extrato
+
+- O backend consulta `GET /api/fees?brand=` antes de criar pagamentos com cartao.
+- A taxa correta para a bandeira e quantidade de parcelas e persistida junto ao checkout.
+- O painel consulta o extrato com filtros de status, tipo e limite.
+- Se o token do gateway expirar, o backend realiza um novo login e repete a chamada uma vez.
+
 ## Fluxo Principal
 
 1. Criar conta publica no gateway por `POST /api/users`.
