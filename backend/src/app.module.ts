@@ -16,7 +16,7 @@ import { CorrelationIdMiddleware } from './common/correlation-id.middleware';
     ConfigModule.forRoot({ isGlobal: true }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), '..', 'frontend', 'dist'),
-      exclude: ['/api', '/api/(.*)', '/docs', '/docs/(.*)']
+      exclude: ['/api{/*path}', '/docs{/*path}']
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
