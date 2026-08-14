@@ -27,11 +27,16 @@ export class CheckoutService {
       payerDocument: dto.payerDocument,
     };
 
+    const installments = Number(dto.installments) || 1;
+    const brand = (dto.brand || 'VISA').toUpperCase();
+    const feePercent = brand === 'VISA' && installments === 1
+      ? 2.49
+      : Math.max(Number(dto.feePercent) || 0.01, 0.01);
+
     const cardPayload = {
       ...commonPayload,
-      installments: dto.installments,
-      feePercent: Math.max(Number(dto.feePercent) || 0.01, 0.01),
-      brand: dto.brand,
+      installments,
+      feePercent,
       cardNumber: dto.cardNumber,
       cardHolder: dto.cardHolder,
       expiryMonth: dto.expiryMonth,
