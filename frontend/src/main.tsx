@@ -58,6 +58,11 @@ function walletValue(wallet: Record<string, unknown> | null) {
   return typeof candidate === 'number' ? money(candidate) : 'Conectado';
 }
 
+function qrCodeSrc(value?: string) {
+  if (!value) return '';
+  return value.startsWith('data:image') ? value : `data:image/png;base64,${value}`;
+}
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [email, setEmail] = useState('admin@demo.com');
@@ -74,7 +79,12 @@ function App() {
     installments: 1,
     feePercent: 0,
     brand: 'VISA',
-    payerDocument: '12345678901'
+    payerDocument: '12345678901',
+    cardNumber: '4111111111111111',
+    cardHolder: 'Cliente Teste',
+    expiryMonth: '12',
+    expiryYear: '2030',
+    cvv: '123'
   });
   const [withdrawal, setWithdrawal] = useState({ amountCents: 1000, pixKey: '' });
 
@@ -151,7 +161,12 @@ function App() {
         installments: form.method === 'CARD' ? Number(form.installments) : undefined,
         feePercent: form.method === 'CARD' ? Number(form.feePercent) : undefined,
         brand: form.method === 'CARD' ? form.brand : undefined,
-        payerDocument: form.payerDocument.replace(/\D/g, '')
+        payerDocument: form.method === 'PIX' ? form.payerDocument.replace(/\D/g, '') : undefined,
+        cardNumber: form.method === 'CARD' ? form.cardNumber.replace(/\D/g, '') : undefined,
+        cardHolder: form.method === 'CARD' ? form.cardHolder : undefined,
+        expiryMonth: form.method === 'CARD' ? form.expiryMonth.padStart(2, '0') : undefined,
+        expiryYear: form.method === 'CARD' ? form.expiryYear : undefined,
+        cvv: form.method === 'CARD' ? form.cvv.replace(/\D/g, '') : undefined
       };
       await request('/checkout-links', { method: 'POST', headers, body: JSON.stringify(payload) });
       setMessage('Link de pagamento criado.');
@@ -289,13 +304,19 @@ function App() {
             <div className="form-grid">
               <label>Descricao<input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
               <label>Valor em centavos<input type="number" value={form.amountCents} onChange={(e) => setForm({ ...form, amountCents: Number(e.target.value) })} /></label>
-              <label>CPF/CNPJ pagador<input value={form.payerDocument} onChange={(e) => setForm({ ...form, payerDocument: e.target.value })} /></label>
               <label>Metodo<select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}><option>PIX</option><option>CARD</option></select></label>
+              {form.method === 'PIX' && (
+                <label>CPF/CNPJ pagador<input value={form.payerDocument} onChange={(e) => setForm({ ...form, payerDocument: e.target.value })} /></label>
+              )}
               {form.method === 'CARD' && (
                 <>
                   <label>Parcelas<input type="number" min="1" max="21" value={form.installments} onChange={(e) => setForm({ ...form, installments: Number(e.target.value) })} /></label>
                   <label>Taxa percentual<input type="number" value={form.feePercent} onChange={(e) => setForm({ ...form, feePercent: Number(e.target.value) })} /></label>
-                  <label>Bandeira<input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></label>
+                  <label>Numero do cartao<input value={form.cardNumber} onChange={(e) => setForm({ ...form, cardNumber: e.target.value })} /></label>
+                  <label>Nome no cartao<input value={form.cardHolder} onChange={(e) => setForm({ ...form, cardHolder: e.target.value })} /></label>
+                  <label>Mes<input value={form.expiryMonth} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value })} /></label>
+                  <label>Ano<input value={form.expiryYear} onChange={(e) => setForm({ ...form, expiryYear: e.target.value })} /></label>
+                  <label>CVV<input value={form.cvv} onChange={(e) => setForm({ ...form, cvv: e.target.value })} /></label>
                 </>
               )}
             </div>
@@ -352,7 +373,8 @@ function App() {
                       <Copy size={16} />
                     </button>
                   )}
-                  {item.qrCodeBase64 && <img src={`data:image/png;base64,${item.qrCodeBase64}`} alt="QR Code Pix" />}
+                  {item.qrCodeBase64 && <img src={qrCodeSrc(item.qrCodeBase64)} alt="QR Code Pix" />}
+                  {item.emv && <textarea className="pix-code" readOnly value={item.emv} />}
                 </article>
               ))}
             </div>

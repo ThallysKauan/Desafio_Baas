@@ -36,4 +36,29 @@ export class CreateCheckoutLinkDto {
   @IsOptional()
   @IsString()
   payerDocument?: string;
+
+  @ApiPropertyOptional({ example: '4111111111111111' })
+  @IsOptional()
+  @IsString()
+  cardNumber?: string;
+
+  @ApiPropertyOptional({ example: 'Cliente Teste' })
+  @IsOptional()
+  @IsString()
+  cardHolder?: string;
+
+  @ApiPropertyOptional({ example: '12' })
+  @IsOptional()
+  @IsString()
+  expiryMonth?: string;
+
+  @ApiPropertyOptional({ example: '2030' })
+  @IsOptional()
+  @IsString()
+  expiryYear?: string;
+
+  @ApiPropertyOptional({ example: '123' })
+  @IsOptional()
+  @IsString()
+  cvv?: string;
 }

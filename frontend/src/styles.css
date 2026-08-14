@@ -577,6 +577,14 @@ p {
   padding: 8px;
 }
 
+.pix-code {
+  grid-column: 1 / -1;
+  min-height: 74px;
+  resize: vertical;
+  color: #cfe5ff;
+  font-size: 12px;
+}
+
 .empty-state {
   min-height: 190px;
   border: 1px dashed var(--line-strong);

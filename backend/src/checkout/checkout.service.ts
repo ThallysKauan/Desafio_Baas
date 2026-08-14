@@ -16,22 +16,48 @@ export class CheckoutService {
 
   async create(userId: string, dto: CreateCheckoutLinkDto) {
     const externalReference = `baas_${randomUUID()}`;
-    const gatewayPayload = {
+    const commonPayload = {
       amount: dto.amountCents,
       description: dto.description,
-      externalReference,
+      externalReference
+    };
+
+    const pixPayload = {
+      ...commonPayload,
       payerDocument: dto.payerDocument,
+    };
+
+    const cardPayload = {
+      ...commonPayload,
       installments: dto.installments,
       feePercent: dto.feePercent,
-      brand: dto.brand
+      cardNumber: dto.cardNumber,
+      cardHolder: dto.cardHolder,
+      expiryMonth: dto.expiryMonth,
+      expiryYear: dto.expiryYear,
+      cvv: dto.cvv
     };
 
     const payment =
       dto.method === 'PIX'
-        ? await this.gateway.createPixPayment(userId, gatewayPayload)
-        : await this.gateway.createCardPayment(userId, gatewayPayload);
+        ? await this.gateway.createPixPayment(userId, pixPayload)
+        : await this.gateway.createCardPayment(userId, cardPayload);
 
     const gatewayPaymentId = payment.id || payment.paymentId || payment.txid || null;
+    const qrCodeBase64 =
+      payment.qrCodeBase64 ||
+      payment.qrcodeBase64 ||
+      payment.qrCode ||
+      payment.qrcode ||
+      payment.qr_code ||
+      null;
+    const emv =
+      payment.emv ||
+      payment.copyPaste ||
+      payment.copy_paste ||
+      payment.pixCopyPaste ||
+      payment.pixCopiaECola ||
+      null;
     const checkout = this.checkoutLinks.create({
       userId,
       externalReference,
@@ -41,8 +67,8 @@ export class CheckoutService {
       installments: dto.installments,
       feePercent: dto.feePercent?.toString() ?? null,
       gatewayPaymentId: gatewayPaymentId ? String(gatewayPaymentId) : null,
-      qrCodeBase64: payment.qrCodeBase64 || payment.qrcodeBase64 || null,
-      emv: payment.emv || payment.copyPaste || null
+      qrCodeBase64: qrCodeBase64 ? String(qrCodeBase64) : null,
+      emv: emv ? String(emv) : null
     });
 
     await this.checkoutLinks.save(checkout);
