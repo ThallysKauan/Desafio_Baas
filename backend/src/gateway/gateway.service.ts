@@ -88,25 +88,79 @@ export class GatewayService {
     return this.getWithAuth(userId, `/withdrawals/${gatewayWithdrawalId}`);
   }
 
+  async listWebhooks(userId: string) {
+    return this.getWithAuth(userId, '/webhooks');
+  }
+
+  async createWebhook(userId: string, payload: { url: string; event: string }) {
+    return this.postWithAuth(userId, '/webhooks', payload);
+  }
+
+  async deleteWebhook(userId: string, webhookId: string) {
+    const token = await this.getAccessToken(userId);
+    try {
+      const { data } = await this.gatewayRequest(() =>
+        firstValueFrom(this.http.delete(`${this.baseUrl}/webhooks/${webhookId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }))
+      );
+      return data;
+    } catch (error) {
+      if (!this.isUnauthorized(error)) throw error;
+      const renewedToken = await this.renewAccessToken(userId);
+      const { data } = await this.gatewayRequest(() =>
+        firstValueFrom(this.http.delete(`${this.baseUrl}/webhooks/${webhookId}`, {
+          headers: { Authorization: `Bearer ${renewedToken}` }
+        }))
+      );
+      return data;
+    }
+  }
+
   private async getWithAuth(userId: string, path: string, params?: Record<string, unknown>) {
     const token = await this.getAccessToken(userId);
-    const { data } = await this.gatewayRequest(() =>
-      firstValueFrom(this.http.get(`${this.baseUrl}${path}`, {
-        params,
-        headers: { Authorization: `Bearer ${token}` }
-      }))
-    );
-    return data;
+    try {
+      return await this.authenticatedGet(path, token, params);
+    } catch (error) {
+      if (!this.isUnauthorized(error)) throw error;
+      return this.authenticatedGet(path, await this.renewAccessToken(userId), params);
+    }
   }
 
   private async postWithAuth(userId: string, path: string, payload: Record<string, unknown>) {
     const token = await this.getAccessToken(userId);
-    const { data } = await this.gatewayRequest(() =>
-      firstValueFrom(this.http.post(`${this.baseUrl}${path}`, payload, {
-        headers: { Authorization: `Bearer ${token}` }
-      }))
-    );
+    try {
+      return await this.authenticatedPost(path, token, payload);
+    } catch (error) {
+      if (!this.isUnauthorized(error)) throw error;
+      return this.authenticatedPost(path, await this.renewAccessToken(userId), payload);
+    }
+  }
+
+  private async authenticatedGet(path: string, token: string, params?: Record<string, unknown>) {
+    const { data } = await this.gatewayRequest(() => firstValueFrom(this.http.get(`${this.baseUrl}${path}`, {
+      params,
+      headers: { Authorization: `Bearer ${token}` }
+    })));
     return data;
+  }
+
+  private async authenticatedPost(path: string, token: string, payload: Record<string, unknown>) {
+    const { data } = await this.gatewayRequest(() => firstValueFrom(this.http.post(`${this.baseUrl}${path}`, payload, {
+      headers: { Authorization: `Bearer ${token}` }
+    })));
+    return data;
+  }
+
+  private async renewAccessToken(userId: string) {
+    await this.gatewayAccounts.update({ userId }, { accessToken: null });
+    return this.loginGateway(userId);
+  }
+
+  private isUnauthorized(error: unknown) {
+    if (!(error instanceof BadGatewayException)) return false;
+    const response = error.getResponse() as { gatewayStatus?: number };
+    return response.gatewayStatus === 401;
   }
 
   private async gatewayRequest<T>(request: () => Promise<T>): Promise<T> {

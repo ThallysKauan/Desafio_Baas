@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { Repository } from 'typeorm';
 import { WebhookEvent } from '../common/entities/webhook-event.entity';
 import { CheckoutService } from '../checkout/checkout.service';
@@ -23,9 +23,18 @@ export class WebhooksService {
     const externalReference = this.readString(payload, ['externalReference', 'external_reference', 'reference']);
     const gatewayId = this.readString(payload, ['id', 'paymentId', 'withdrawalId']);
     const status = this.readString(payload, ['status']) || 'PENDING';
+    const eventId = this.readString(payload, ['eventId', 'event_id', 'webhookId']);
+    const eventKey = createHash('sha256')
+      .update(`${eventType}:${eventId || gatewayId || externalReference || ''}:${status}:${JSON.stringify(payload)}`)
+      .digest('hex');
+
+    const existing = await this.events.findOne({ where: { eventKey } });
+    if (existing) {
+      return { received: true, duplicate: true, eventId: existing.id };
+    }
 
     const event = await this.events.save(
-      this.events.create({ eventType, externalReference, gatewayId, payload, processed: false })
+      this.events.create({ eventKey, eventType, externalReference, gatewayId, payload, processed: false })
     );
 
     if (eventType.startsWith('PAYMENT') && externalReference) {
