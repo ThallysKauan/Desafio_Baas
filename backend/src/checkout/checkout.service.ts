@@ -31,6 +31,7 @@ export class CheckoutService {
       ...commonPayload,
       installments: dto.installments,
       feePercent: Math.max(Number(dto.feePercent) || 0.01, 0.01),
+      brand: dto.brand,
       cardNumber: dto.cardNumber,
       cardHolder: dto.cardHolder,
       expiryMonth: dto.expiryMonth,

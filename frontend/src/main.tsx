@@ -77,7 +77,7 @@ function App() {
     amountCents: 1990,
     method: 'PIX',
     installments: 1,
-    feePercent: 2.99,
+    feePercent: 2.49,
     brand: 'VISA',
     payerDocument: '12345678901',
     cardNumber: '4111111111111111',
@@ -318,6 +318,7 @@ function App() {
                 <>
                   <label>Parcelas<input type="number" min="1" max="21" value={form.installments} onChange={(e) => setForm({ ...form, installments: Number(e.target.value) })} /></label>
                   <label>Taxa percentual<input type="number" min="0.01" step="0.01" value={form.feePercent} onChange={(e) => setForm({ ...form, feePercent: Number(e.target.value) })} /></label>
+                  <label>Bandeira<input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value.toUpperCase() })} /></label>
                   <label>Numero do cartao<input value={form.cardNumber} onChange={(e) => setForm({ ...form, cardNumber: e.target.value })} /></label>
                   <label>Nome no cartao<input value={form.cardHolder} onChange={(e) => setForm({ ...form, cardHolder: e.target.value })} /></label>
                   <label>Mes<input value={form.expiryMonth} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value })} /></label>
