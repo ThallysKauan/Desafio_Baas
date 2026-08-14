@@ -360,7 +360,7 @@ function App() {
         <section className="performance-card">
           <div className="history-head">
             <div>
-              <span className="eyebrow">Portfolio performance</span>
+              <span className="eyebrow">Performance da operacao</span>
               <h2>Movimento operacional</h2>
             </div>
             <div className="range-tabs">
@@ -370,11 +370,7 @@ function App() {
               <span>1Y</span>
             </div>
           </div>
-          <div className="chart-panel" aria-hidden="true">
-            <div className="chart-line"></div>
-            <div className="chart-glow"></div>
-            <span className="chart-tag"><BarChart3 size={14} /> Sync OK</span>
-          </div>
+          <OperationalChart transactions={transactions as GatewayTransaction[]} />
         </section>
 
         <section className="operations-grid checkout-studio" id="checkout">
@@ -583,6 +579,44 @@ function TransactionRow({ transaction }: { transaction: GatewayTransaction }) {
   const dateValue = transaction.createdAt ?? transaction.created_at ?? transaction.date;
   const date = dateValue ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(String(dateValue))) : '--';
   return <article className="ledger-row"><span className="transaction-name"><i className={type.toLowerCase()}>{type === 'PIX' ? <QrCode size={15} /> : type === 'CARD' ? <CreditCard size={15} /> : <Banknote size={15} />}</i><strong>{description}</strong></span><span>{type}</span><span>{date}</span><span className={`status-badge ${status.toLowerCase()}`}>{statusLabel(status)}</span><strong>{money(rawAmount)}</strong></article>;
+}
+
+function OperationalChart({ transactions }: { transactions: GatewayTransaction[] }) {
+  const fallback = [34, 43, 39, 51, 47, 62, 55, 69, 64, 76, 68, 81, 73, 86];
+  const transactionValues = transactions
+    .slice(0, 14)
+    .reverse()
+    .map((item) => Number(item.amountCents ?? item.amount ?? item.value ?? 0))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const rawValues = transactionValues.length > 2 ? transactionValues : fallback;
+  const min = Math.min(...rawValues);
+  const max = Math.max(...rawValues);
+  const points = rawValues.map((value, index) => {
+    const x = 28 + (index / Math.max(rawValues.length - 1, 1)) * 944;
+    const normalized = max === min ? .5 : (value - min) / (max - min);
+    return { x, y: 174 - normalized * 112, value };
+  });
+  const linePath = points.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ');
+  const areaPath = `${linePath} L ${points[points.length - 1]?.x || 972} 190 L ${points[0]?.x || 28} 190 Z`;
+  const latest = rawValues[rawValues.length - 1] || 0;
+
+  return (
+    <div className="chart-panel" aria-label="Grafico do movimento operacional">
+      <div className="chart-summary"><span>Volume recente</span><strong>{transactionValues.length > 2 ? money(latest) : 'Ambiente conectado'}</strong></div>
+      <svg className="operation-chart" viewBox="0 0 1000 220" preserveAspectRatio="none" role="img">
+        <defs>
+          <linearGradient id="chartArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#238cff" stopOpacity=".34"/><stop offset="1" stopColor="#238cff" stopOpacity="0"/></linearGradient>
+          <filter id="chartGlow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <g className="chart-grid"><line x1="28" y1="62" x2="972" y2="62"/><line x1="28" y1="100" x2="972" y2="100"/><line x1="28" y1="138" x2="972" y2="138"/><line x1="28" y1="176" x2="972" y2="176"/></g>
+        <path className="chart-area-path" d={areaPath}/>
+        <path className="chart-line-path" d={linePath}/>
+        {points.map((point, index) => <circle className={index === points.length - 1 ? 'latest-point' : ''} key={index} cx={point.x} cy={point.y} r={index === points.length - 1 ? 4.5 : 2.2}/>) }
+      </svg>
+      <div className="chart-axis"><span>Inicio</span><span>Meio do periodo</span><span>Agora</span></div>
+      <span className="chart-tag"><BarChart3 size={14} /> Sincronizado</span>
+    </div>
+  );
 }
 
 function Metric({ icon, label, value, detail, loading }: { icon: React.ReactNode; label: string; value: string; detail: string; loading?: boolean }) {
