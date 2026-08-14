@@ -27,16 +27,16 @@ export class CheckoutLink {
   status: CheckoutStatus;
 
   @Column({ nullable: true })
-  gatewayPaymentId: string;
-
-  @Column({ nullable: true })
-  qrCodeBase64: string;
+  gatewayPaymentId: string | null;
 
   @Column({ nullable: true, type: 'text' })
-  emv: string;
+  qrCodeBase64: string | null;
+
+  @Column({ nullable: true, type: 'text' })
+  emv: string | null;
 
   @Column({ nullable: true })
-  installments: number;
+  installments: number | null;
 
   @Column({ nullable: true, type: 'decimal', precision: 8, scale: 4 })
   feePercent: string | null;

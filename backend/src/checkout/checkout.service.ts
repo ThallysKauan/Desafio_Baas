@@ -31,6 +31,7 @@ export class CheckoutService {
         ? await this.gateway.createPixPayment(userId, gatewayPayload)
         : await this.gateway.createCardPayment(userId, gatewayPayload);
 
+    const gatewayPaymentId = payment.id || payment.paymentId || payment.txid || null;
     const checkout = this.checkoutLinks.create({
       userId,
       externalReference,
@@ -39,7 +40,7 @@ export class CheckoutService {
       method: dto.method,
       installments: dto.installments,
       feePercent: dto.feePercent?.toString() ?? null,
-      gatewayPaymentId: payment.id || payment.paymentId || payment.txid || null,
+      gatewayPaymentId: gatewayPaymentId ? String(gatewayPaymentId) : null,
       qrCodeBase64: payment.qrCodeBase64 || payment.qrcodeBase64 || null,
       emv: payment.emv || payment.copyPaste || null
     });
