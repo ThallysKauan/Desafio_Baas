@@ -26,4 +26,9 @@ export class WithdrawalsController {
   refresh(@CurrentUser() user: { id: string }, @Param('id') id: string) {
     return this.withdrawalsService.refresh(user.id, id);
   }
+
+  @Get(':id')
+  getStatus(@CurrentUser() user: { id: string }, @Param('id') id: string) {
+    return this.withdrawalsService.refresh(user.id, id);
+  }
 }

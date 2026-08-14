@@ -17,8 +17,8 @@ export class Withdrawal {
   @Column({ default: 'PENDING' })
   status: string;
 
-  @Column({ nullable: true })
-  gatewayWithdrawalId: string;
+  @Column({ nullable: true, type: 'varchar', length: 120 })
+  gatewayWithdrawalId: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -16,7 +16,6 @@ export class WithdrawalsService {
   async create(userId: string, dto: CreateWithdrawalDto) {
     const response = await this.gateway.createWithdrawal(userId, {
       amount: dto.amountCents,
-      amountCents: dto.amountCents,
       pixKey: dto.pixKey
     });
 
@@ -25,8 +24,8 @@ export class WithdrawalsService {
         userId,
         amountCents: dto.amountCents,
         pixKey: dto.pixKey,
-        gatewayWithdrawalId: response.id || response.withdrawalId || null,
-        status: response.status || 'PENDING'
+        gatewayWithdrawalId: String(response.id || response.withdrawalId || response.withdrawal?.id || '') || null,
+        status: String(response.status || response.withdrawal?.status || 'PENDING').toUpperCase()
       })
     );
 
@@ -43,7 +42,7 @@ export class WithdrawalsService {
       return withdrawal;
     }
     const response = await this.gateway.getWithdrawal(userId, withdrawal.gatewayWithdrawalId);
-    withdrawal.status = response.status || withdrawal.status;
+    withdrawal.status = String(response.status || response.withdrawal?.status || withdrawal.status).toUpperCase();
     return this.withdrawals.save(withdrawal);
   }
 
@@ -52,7 +51,7 @@ export class WithdrawalsService {
     if (!withdrawal) {
       return null;
     }
-    withdrawal.status = status;
+    withdrawal.status = status.toUpperCase();
     return this.withdrawals.save(withdrawal);
   }
 }
