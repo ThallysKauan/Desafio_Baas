@@ -4,6 +4,7 @@ import {
   Activity,
   ArrowRight,
   BadgeCheck,
+  BarChart3,
   Banknote,
   Copy,
   CreditCard,
@@ -186,10 +187,10 @@ function App() {
         <section className="auth-visual">
           <div className="brand-lockup">
             <span className="brand-mark"><Sparkles size={18} /></span>
-            <span>BaaS Checkout</span>
+            <span>StoneVest BaaS</span>
           </div>
-          <h1>Operacoes Pix, cartao e carteira em um painel de gateway.</h1>
-          <p>Ambiente BaaS conectado ao Lera Box, com conciliacao por referencia externa e eventos assincronos.</p>
+          <h1>Carteira, checkout e gateway em um cockpit financeiro.</h1>
+          <p>Painel BaaS conectado ao Lera Box para Pix, cartao, saques, extrato e conciliacao.</p>
           <div className="trust-row">
             <span><ShieldCheck size={16} /> Tokens no backend</span>
             <span><BadgeCheck size={16} /> MySQL proprio</span>
@@ -218,11 +219,11 @@ function App() {
       <aside className="sidebar">
         <div className="brand-lockup">
           <span className="brand-mark"><Sparkles size={18} /></span>
-          <span>BaaS Checkout</span>
+          <span>StoneVest BaaS</span>
         </div>
         <nav>
-          <a className="active"><Wallet size={18} /> Operacoes</a>
-          <a href="/docs"><Activity size={18} /> Swagger</a>
+          <a className="active"><Wallet size={18} /> Dashboard</a>
+          <a href="/docs"><Activity size={18} /> API Docs</a>
           <a><ShieldCheck size={18} /> Webhooks</a>
         </nav>
         <button className="quiet-action" onClick={logout}><LogOut size={17} /> Sair</button>
@@ -232,7 +233,7 @@ function App() {
         <header className="topbar">
           <div>
             <span className="eyebrow">Gateway Lera Box</span>
-            <h1>Painel financeiro do lojista</h1>
+            <h1>Welcome, Merchant</h1>
           </div>
           <button className="secondary-action" onClick={loadDashboard} disabled={loading}>
             {loading ? <Loader2 className="spin" size={18} /> : <RefreshCcw size={18} />}
@@ -246,6 +247,26 @@ function App() {
           <Metric icon={<Wallet size={22} />} label="Carteira" value={walletValue(wallet)} detail="Saldo do gateway" />
           <Metric icon={<LinkIcon size={22} />} label="Links" value={String(checkouts.length)} detail={`${pendingCount} pendentes`} />
           <Metric icon={<CreditCard size={22} />} label="Aprovados" value={String(approvedCount)} detail={`${transactions.length} transacoes`} />
+        </section>
+
+        <section className="performance-card">
+          <div className="history-head">
+            <div>
+              <span className="eyebrow">Portfolio performance</span>
+              <h2>Movimento operacional</h2>
+            </div>
+            <div className="range-tabs">
+              <span>1D</span>
+              <span>1W</span>
+              <span className="selected">1M</span>
+              <span>1Y</span>
+            </div>
+          </div>
+          <div className="chart-panel" aria-hidden="true">
+            <div className="chart-line"></div>
+            <div className="chart-glow"></div>
+            <span className="chart-tag"><BarChart3 size={14} /> Sync OK</span>
+          </div>
         </section>
 
         <section className="operations-grid">
