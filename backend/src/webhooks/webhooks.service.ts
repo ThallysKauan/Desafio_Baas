@@ -23,6 +23,7 @@ export class WebhooksService {
     const externalReference = this.readString(payload, ['externalReference', 'external_reference', 'reference']);
     const gatewayId = this.readString(payload, ['id', 'paymentId', 'withdrawalId']);
     const status = this.readString(payload, ['status']) || 'PENDING';
+    const failureReason = this.readString(payload, ['reason', 'message', 'declineReason', 'failureReason']);
     const eventId = this.readString(payload, ['eventId', 'event_id', 'webhookId']);
     const eventKey = createHash('sha256')
       .update(`${eventType}:${eventId || gatewayId || externalReference || ''}:${status}:${JSON.stringify(payload)}`)
@@ -38,7 +39,7 @@ export class WebhooksService {
     );
 
     if (eventType.startsWith('PAYMENT') && externalReference) {
-      await this.checkoutService.updateByExternalReference(externalReference, status);
+      await this.checkoutService.updateByExternalReference(externalReference, status, failureReason);
     }
 
     if (eventType === 'WITHDRAWAL' && gatewayId) {

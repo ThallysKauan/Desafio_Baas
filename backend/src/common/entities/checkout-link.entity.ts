@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-export type CheckoutMethod = 'PIX' | 'CARD';
-export type CheckoutStatus = 'PENDING' | 'APPROVED' | 'DENIED' | 'EXPIRED' | 'CANCELLED';
+export type CheckoutMethod = 'PIX' | 'CARD' | 'BOTH';
+export type CheckoutStatus = 'OPEN' | 'PENDING' | 'APPROVED' | 'DENIED' | 'EXPIRED' | 'CANCELLED';
 
 @Entity('checkout_links')
 export class CheckoutLink {
@@ -20,11 +20,26 @@ export class CheckoutLink {
   @Column()
   amountCents: number;
 
+  @Column({ nullable: true, type: 'varchar', length: 180 })
+  customerEmail: string | null;
+
+  @Column({ nullable: true, type: 'varchar', length: 14 })
+  payerDocument: string | null;
+
   @Column({ type: 'varchar', length: 20 })
   method: CheckoutMethod;
 
-  @Column({ type: 'varchar', length: 20, default: 'PENDING' })
+  @Column({ type: 'varchar', length: 20, default: 'OPEN' })
   status: CheckoutStatus;
+
+  @Column({ nullable: true, type: 'text' })
+  failureReason: string | null;
+
+  @Column({ type: 'int', default: 0 })
+  attempts: number;
+
+  @Column({ nullable: true, type: 'datetime' })
+  lastAttemptAt: Date | null;
 
   @Column({ nullable: true, type: 'varchar', length: 120 })
   gatewayPaymentId: string | null;
