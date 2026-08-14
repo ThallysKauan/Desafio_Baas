@@ -85,7 +85,12 @@ function App() {
     const response = await fetch(`${apiBase}${path}`, options);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(Array.isArray(data.message) ? data.message.join(', ') : data.message || 'Erro inesperado');
+      const message = Array.isArray(data.message)
+        ? data.message.join(', ')
+        : typeof data.message === 'object'
+          ? data.message.message || JSON.stringify(data.message)
+          : data.message;
+      throw new Error(message || 'Erro inesperado');
     }
     return data;
   }

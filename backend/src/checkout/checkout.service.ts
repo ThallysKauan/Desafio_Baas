@@ -16,18 +16,6 @@ export class CheckoutService {
 
   async create(userId: string, dto: CreateCheckoutLinkDto) {
     const externalReference = `baas_${randomUUID()}`;
-    const checkout = await this.checkoutLinks.save(
-      this.checkoutLinks.create({
-        userId,
-        externalReference,
-        description: dto.description,
-        amountCents: dto.amountCents,
-        method: dto.method,
-        installments: dto.installments,
-        feePercent: dto.feePercent?.toString() ?? null
-      })
-    );
-
     const gatewayPayload = {
       amount: dto.amountCents,
       amountCents: dto.amountCents,
@@ -43,9 +31,19 @@ export class CheckoutService {
         ? await this.gateway.createPixPayment(userId, gatewayPayload)
         : await this.gateway.createCardPayment(userId, gatewayPayload);
 
-    checkout.gatewayPaymentId = payment.id || payment.paymentId || payment.txid || null;
-    checkout.qrCodeBase64 = payment.qrCodeBase64 || payment.qrcodeBase64 || null;
-    checkout.emv = payment.emv || payment.copyPaste || null;
+    const checkout = this.checkoutLinks.create({
+      userId,
+      externalReference,
+      description: dto.description,
+      amountCents: dto.amountCents,
+      method: dto.method,
+      installments: dto.installments,
+      feePercent: dto.feePercent?.toString() ?? null,
+      gatewayPaymentId: payment.id || payment.paymentId || payment.txid || null,
+      qrCodeBase64: payment.qrCodeBase64 || payment.qrcodeBase64 || null,
+      emv: payment.emv || payment.copyPaste || null
+    });
+
     await this.checkoutLinks.save(checkout);
 
     return { checkout, payment };

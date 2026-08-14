@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadGatewayException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { firstValueFrom } from 'rxjs';
@@ -35,8 +35,8 @@ export class GatewayService {
       throw new InternalServerErrorException('Credenciais do gateway não configuradas no .env');
     }
 
-    const { data } = await firstValueFrom(
-      this.http.post(`${this.baseUrl}/auth/login`, { document, password })
+    const { data } = await this.gatewayRequest(() =>
+      firstValueFrom(this.http.post(`${this.baseUrl}/auth/login`, { document, password }))
     );
 
     const token = data.access_token || data.accessToken || data.token;
@@ -58,8 +58,8 @@ export class GatewayService {
   }
 
   async getFees(brand?: string) {
-    const { data } = await firstValueFrom(
-      this.http.get(`${this.baseUrl}/fees`, { params: brand ? { brand } : undefined })
+    const { data } = await this.gatewayRequest(() =>
+      firstValueFrom(this.http.get(`${this.baseUrl}/fees`, { params: brand ? { brand } : undefined }))
     );
     return data;
   }
@@ -90,22 +90,42 @@ export class GatewayService {
 
   private async getWithAuth(userId: string, path: string, params?: Record<string, unknown>) {
     const token = await this.getAccessToken(userId);
-    const { data } = await firstValueFrom(
-      this.http.get(`${this.baseUrl}${path}`, {
+    const { data } = await this.gatewayRequest(() =>
+      firstValueFrom(this.http.get(`${this.baseUrl}${path}`, {
         params,
         headers: { Authorization: `Bearer ${token}` }
-      })
+      }))
     );
     return data;
   }
 
   private async postWithAuth(userId: string, path: string, payload: Record<string, unknown>) {
     const token = await this.getAccessToken(userId);
-    const { data } = await firstValueFrom(
-      this.http.post(`${this.baseUrl}${path}`, payload, {
+    const { data } = await this.gatewayRequest(() =>
+      firstValueFrom(this.http.post(`${this.baseUrl}${path}`, payload, {
         headers: { Authorization: `Bearer ${token}` }
-      })
+      }))
     );
     return data;
+  }
+
+  private async gatewayRequest<T>(request: () => Promise<T>): Promise<T> {
+    try {
+      return await request();
+    } catch (error) {
+      const maybeAxiosError = error as {
+        response?: { status?: number; data?: { message?: string | string[]; error?: string } };
+        message?: string;
+      };
+      const status = maybeAxiosError.response?.status;
+      const data = maybeAxiosError.response?.data;
+      const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message;
+
+      throw new BadGatewayException({
+        message: message || maybeAxiosError.message || 'Falha ao comunicar com o gateway',
+        gatewayStatus: status,
+        gatewayError: data?.error
+      });
+    }
   }
 }
