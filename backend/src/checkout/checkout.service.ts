@@ -57,7 +57,12 @@ export class CheckoutService {
     }
 
     const externalReference = this.createExternalReference(checkout.id);
-    const commonPayload = { amount: checkout.amountCents, description: checkout.description, externalReference };
+    const commonPayload = {
+      amount: checkout.amountCents,
+      description: checkout.description,
+      externalReference,
+      payerDocument: dto.payerDocument
+    };
     checkout.externalReference = externalReference;
     checkout.attempts += 1;
     checkout.lastAttemptAt = new Date();
@@ -77,7 +82,7 @@ export class CheckoutService {
         if (dto.payerDocument === '00000000000') {
           throw new BadRequestException('CPF com pendência cadastral na Receita Federal (Simulação de Teste)');
         }
-        payment = await this.gateway.createPixPayment(checkout.userId, { ...commonPayload, document: dto.payerDocument });
+        payment = await this.gateway.createPixPayment(checkout.userId, commonPayload);
       } else {
         this.validateCard(dto);
         const cardDigits = (dto.cardNumber || '').replace(/\D/g, '');

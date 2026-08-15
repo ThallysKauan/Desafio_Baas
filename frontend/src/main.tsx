@@ -153,7 +153,7 @@ function App() {
   const [createdLink, setCreatedLink] = useState('');
   const [form, setForm] = useState({
     description: 'Pedido teste',
-    amountCents: 1990,
+    amountReais: '19.90',
     method: 'BOTH',
     installments: 1,
     feePercent: 2.49,
@@ -165,7 +165,10 @@ function App() {
     expiryYear: '2030',
     cvv: '123'
   });
-  const [withdrawal, setWithdrawal] = useState({ amountCents: 1000, pixKey: '' });
+  const [withdrawal, setWithdrawal] = useState({ amountReais: '10.00', pixKey: '' });
+
+  const formAmountCents = useMemo(() => Math.round((parseFloat(String(form.amountReais).replace(',', '.')) || 0) * 100), [form.amountReais]);
+  const withdrawalAmountCents = useMemo(() => Math.round((parseFloat(String(withdrawal.amountReais).replace(',', '.')) || 0) * 100), [withdrawal.amountReais]);
 
   const headers = useMemo(() => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }), [token]);
   const approvedCount = checkouts.filter((item) => item.status === 'APPROVED').length;
@@ -264,7 +267,7 @@ function App() {
       setLoading(true);
       const payload = {
         description: form.description,
-        amountCents: Number(form.amountCents),
+        amountCents: formAmountCents,
         method: form.method
       };
       const checkout = await request('/checkout-links', { method: 'POST', headers, body: JSON.stringify(payload) });
@@ -284,7 +287,7 @@ function App() {
       await request('/withdrawals', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ amountCents: Number(withdrawal.amountCents), pixKey: withdrawal.pixKey })
+        body: JSON.stringify({ amountCents: withdrawalAmountCents, pixKey: withdrawal.pixKey })
       });
       setMessage('Saque solicitado.');
       setWithdrawal((current) => ({ ...current, pixKey: '' }));
@@ -409,18 +412,18 @@ function App() {
                 <h3>Crie o link. O cliente conclui.</h3>
                 <p>Os dados de CPF e cartao sao preenchidos pelo pagador em uma pagina publica e segura.</p>
               </div>
-              <div className="link-builder-visual"><LinkIcon size={28}/><span>checkout seguro</span><strong>{money(Number(form.amountCents))}</strong><small>{form.method === 'BOTH' ? 'Pix ou cartao' : form.method}</small></div>
+              <div className="link-builder-visual"><LinkIcon size={28}/><span>checkout seguro</span><strong>{money(formAmountCents)}</strong><small>{form.method === 'BOTH' ? 'Pix ou cartao' : form.method}</small></div>
             </div>
 
             <div className="form-grid">
               <label>Descricao<input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
-              <label>Valor em centavos<input type="number" value={form.amountCents} onChange={(e) => setForm({ ...form, amountCents: Number(e.target.value) })} /></label>
+              <label>Valor (R$)<input type="number" step="0.01" min="0.01" placeholder="19.90" value={form.amountReais} onChange={(e) => setForm({ ...form, amountReais: e.target.value })} /></label>
             </div>
 
             <div className="payment-preview">
               <div>
                 <span>Total da cobranca</span>
-                <strong>{money(Number(form.amountCents))}</strong>
+                <strong>{money(formAmountCents)}</strong>
               </div>
               <div>
                 <span>Metodo</span>
@@ -434,7 +437,7 @@ function App() {
 
             {createdLink && <div className="created-link"><div><span>Link pronto para compartilhar</span><strong>{createdLink}</strong></div><button className="icon-action" title="Copiar link" onClick={() => copyText(createdLink)}><Copy size={16}/></button><a className="icon-action" href={createdLink} target="_blank" title="Abrir checkout"><ExternalLink size={16}/></a></div>}
 
-            <button className="primary-action" onClick={createCheckout} disabled={loading || form.description.trim().length < 3 || form.amountCents < 100}>
+            <button className="primary-action" onClick={createCheckout} disabled={loading || form.description.trim().length < 3 || formAmountCents < 100}>
               {loading ? <Loader2 className="spin" size={18} /> : <LinkIcon size={18} />}
               {loading ? 'Criando checkout' : 'Criar link de pagamento'}
               <ArrowRight size={18} />
@@ -449,10 +452,10 @@ function App() {
                 <p>Solicita retirada para chave Pix externa.</p>
               </div>
             </div>
-            <div className="withdrawal-balance"><span>Valor da retirada</span><strong>{money(withdrawal.amountCents)}</strong><small>Transferencia para chave Pix</small></div>
-            <label>Valor em centavos<input type="number" min="100" step="100" value={withdrawal.amountCents} onChange={(e) => setWithdrawal({ ...withdrawal, amountCents: Number(e.target.value) })} /></label>
+            <div className="withdrawal-balance"><span>Valor da retirada</span><strong>{money(withdrawalAmountCents)}</strong><small>Transferencia para chave Pix</small></div>
+            <label>Valor (R$)<input type="number" step="0.01" min="1.00" placeholder="10.00" value={withdrawal.amountReais} onChange={(e) => setWithdrawal({ ...withdrawal, amountReais: e.target.value })} /></label>
             <label>Chave Pix<input placeholder="CPF, e-mail, telefone ou chave aleatoria" value={withdrawal.pixKey} onChange={(e) => setWithdrawal({ ...withdrawal, pixKey: e.target.value })} /></label>
-            <button className="secondary-action fill" onClick={createWithdrawal} disabled={loading || withdrawal.amountCents < 100 || !withdrawal.pixKey.trim()}><Banknote size={18} /> Solicitar saque</button>
+            <button className="secondary-action fill" onClick={createWithdrawal} disabled={loading || withdrawalAmountCents < 100 || !withdrawal.pixKey.trim()}><Banknote size={18} /> Solicitar saque</button>
             <div className="withdrawal-history">
               <div className="mini-heading"><span>Saques recentes</span><small>{withdrawals.length}</small></div>
               {withdrawals.slice(0, 3).map((item) => <article key={item.id}><div><strong>{money(item.amountCents)}</strong><small>{item.pixKey}</small></div><span className={`status-badge ${item.status.toLowerCase()}`}>{statusLabel(item.status)}</span><button className="refresh-mini" title="Consultar status" onClick={() => refreshWithdrawal(item.id)}><RefreshCcw size={13}/></button></article>)}
