@@ -191,9 +191,16 @@ export class CheckoutService {
       && calculateDigit([6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(digits[13]);
   }
 
-  private readPaymentField(payment: Record<string, any>, keys: string[]) {
+  private readPaymentField(payment: Record<string, any>, keys: string[]): string | null {
+    if (!payment || typeof payment !== 'object') return null;
     for (const key of keys) {
-      if (payment[key]) return String(payment[key]);
+      if (payment[key] && typeof payment[key] === 'string') return payment[key];
+    }
+    for (const value of Object.values(payment)) {
+      if (value && typeof value === 'object') {
+        const found = this.readPaymentField(value as Record<string, any>, keys);
+        if (found) return found;
+      }
     }
     return null;
   }
