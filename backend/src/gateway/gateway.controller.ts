@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { CreateGatewayWebhookDto } from './dto/create-gateway-webhook.dto';
+import { UpdateGatewayCredentialsDto } from './dto/update-gateway-credentials.dto';
 import { GatewayService } from './gateway.service';
 
 @ApiTags('gateway')
@@ -15,6 +16,16 @@ export class GatewayController {
   @Get('fees')
   fees(@Query('brand') brand?: string) {
     return this.gatewayService.getFees(brand);
+  }
+
+  @Get('credentials')
+  getCredentials(@CurrentUser() user: { id: string }) {
+    return this.gatewayService.getCredentials(user.id);
+  }
+
+  @Post('credentials')
+  saveCredentials(@CurrentUser() user: { id: string }, @Body() dto: UpdateGatewayCredentialsDto) {
+    return this.gatewayService.saveCredentials(user.id, dto);
   }
 
   @Get('webhooks')

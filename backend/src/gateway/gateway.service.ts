@@ -28,11 +28,12 @@ export class GatewayService {
   }
 
   async loginGateway(userId: string) {
-    const document = this.config.get<string>('GATEWAY_DOCUMENT');
-    const password = this.config.get<string>('GATEWAY_PASSWORD');
+    const account = await this.gatewayAccounts.findOne({ where: { userId } });
+    const document = account?.document || this.config.get<string>('GATEWAY_DOCUMENT');
+    const password = account?.password || this.config.get<string>('GATEWAY_PASSWORD');
 
     if (!document || !password) {
-      throw new InternalServerErrorException('Credenciais do gateway não configuradas no .env');
+      throw new InternalServerErrorException('Credenciais do gateway não configuradas para esta conta');
     }
 
     const { data } = await this.gatewayRequest(() =>
@@ -44,17 +45,39 @@ export class GatewayService {
       throw new InternalServerErrorException('Gateway não retornou access token');
     }
 
-    const account = await this.gatewayAccounts.findOne({ where: { userId } });
     await this.gatewayAccounts.save({
       id: account?.id,
       userId,
+      document,
+      password,
       accessToken: token,
-      document: this.config.get('GATEWAY_DOCUMENT'),
       customerCode: data.CodigoCliente || data.codigoCliente || this.config.get('GATEWAY_CUSTOMER_CODE'),
       storeKey: data.ChaveLoja || data.chaveLoja || this.config.get('GATEWAY_STORE_KEY')
     });
 
     return token;
+  }
+
+  async saveCredentials(userId: string, dto: { document: string; password: string }) {
+    let account = await this.gatewayAccounts.findOne({ where: { userId } });
+    if (!account) {
+      account = this.gatewayAccounts.create({ userId });
+    }
+    account.document = dto.document;
+    account.password = dto.password;
+    account.accessToken = null; // force re-login with new credentials
+    await this.gatewayAccounts.save(account);
+    await this.loginGateway(userId);
+    return { success: true, message: 'Credenciais do gateway atualizadas com sucesso' };
+  }
+
+  async getCredentials(userId: string) {
+    const account = await this.gatewayAccounts.findOne({ where: { userId } });
+    const isConfigured = Boolean(account?.document || this.config.get('GATEWAY_DOCUMENT'));
+    return {
+      document: account?.document ? `${account.document.substring(0, 3)}***` : (this.config.get('GATEWAY_DOCUMENT') ? 'Configurado (padrão)' : ''),
+      isConfigured
+    };
   }
 
   async getFees(brand?: string) {

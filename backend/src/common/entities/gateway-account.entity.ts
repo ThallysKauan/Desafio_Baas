@@ -12,6 +12,9 @@ export class GatewayAccount {
   document: string;
 
   @Column({ nullable: true })
+  password: string;
+
+  @Column({ nullable: true })
   customerCode: string;
 
   @Column({ nullable: true })
