@@ -95,8 +95,9 @@ export class CheckoutService {
 
       const paymentData = payment.payment || payment.data || payment;
       checkout.gatewayPaymentId = String(paymentData.id || paymentData.paymentId || paymentData.txid || '') || null;
-      checkout.qrCodeBase64 = this.readPaymentField(paymentData, ['qrCodeBase64', 'qrcodeBase64', 'qrCode', 'qrcode', 'qr_code']);
-      checkout.emv = this.readPaymentField(paymentData, ['emv', 'copyPaste', 'copy_paste', 'pixCopyPaste', 'pixCopiaECola']);
+      const pixInfo = this.extractPixFields(paymentData);
+      checkout.qrCodeBase64 = pixInfo.qrCodeBase64;
+      checkout.emv = pixInfo.emv;
       checkout.status = this.normalizeStatus(paymentData.status, 'PENDING');
       checkout.failureReason = checkout.status === 'DENIED'
         ? String(paymentData.reason || paymentData.message || paymentData.declineReason || 'Pagamento não autorizado')
@@ -203,6 +204,39 @@ export class CheckoutService {
       }
     }
     return null;
+  }
+
+  private extractPixFields(paymentData: Record<string, any>) {
+    const strings: string[] = [];
+    const visit = (val: any) => {
+      if (!val) return;
+      if (typeof val === 'string') {
+        strings.push(val);
+      } else if (typeof val === 'object') {
+        Object.values(val).forEach(visit);
+      }
+    };
+    visit(paymentData);
+
+    let emv = strings.find((s) => s.startsWith('000201')) || null;
+    let qrCodeBase64 = strings.find((s) =>
+      s.startsWith('data:image') ||
+      s.startsWith('http://') ||
+      s.startsWith('https://') ||
+      (s.startsWith('iVBORw0KG') && s.length > 100)
+    ) || null;
+
+    if (!emv) {
+      emv = this.readPaymentField(paymentData, ['emv', 'copyPaste', 'copy_paste', 'pixCopyPaste', 'pixCopiaECola', 'brcode', 'code', 'payload']);
+    }
+    if (!qrCodeBase64) {
+      const candidate = this.readPaymentField(paymentData, ['qrCodeBase64', 'qrcodeBase64', 'qrCodeUrl', 'qr_code_url', 'base64', 'image']);
+      if (candidate && !candidate.startsWith('000201')) {
+        qrCodeBase64 = candidate;
+      }
+    }
+
+    return { emv, qrCodeBase64 };
   }
 
   private normalizeStatus(status: unknown, fallback: CheckoutLink['status']): CheckoutLink['status'] {
