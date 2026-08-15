@@ -54,11 +54,9 @@ export class CheckoutService {
       throw new BadRequestException('Método de pagamento não permitido neste link');
     }
 
-    const amountCents = dto.amountCents ?? checkout.amountCents;
     const externalReference = this.createExternalReference(checkout.id);
-    const commonPayload = { amount: amountCents, description: checkout.description, externalReference };
+    const commonPayload = { amount: checkout.amountCents, description: checkout.description, externalReference };
     checkout.externalReference = externalReference;
-    checkout.amountCents = amountCents;
     checkout.attempts += 1;
     checkout.lastAttemptAt = new Date();
     checkout.failureReason = null;
