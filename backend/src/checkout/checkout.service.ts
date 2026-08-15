@@ -18,7 +18,7 @@ export class CheckoutService {
   ) {}
 
   async create(userId: string, dto: CreateCheckoutLinkDto) {
-    const externalReference = `baas_${randomUUID()}`;
+    const externalReference = this.createExternalReference();
     const checkout = this.checkoutLinks.create({
       userId,
       externalReference,
@@ -54,9 +54,11 @@ export class CheckoutService {
       throw new BadRequestException('Método de pagamento não permitido neste link');
     }
 
-    const externalReference = `baas_${checkout.id}_${randomUUID()}`;
-    const commonPayload = { amount: checkout.amountCents, description: checkout.description, externalReference };
+    const amountCents = dto.amountCents ?? checkout.amountCents;
+    const externalReference = this.createExternalReference(checkout.id);
+    const commonPayload = { amount: amountCents, description: checkout.description, externalReference };
     checkout.externalReference = externalReference;
+    checkout.amountCents = amountCents;
     checkout.attempts += 1;
     checkout.lastAttemptAt = new Date();
     checkout.failureReason = null;
@@ -150,6 +152,12 @@ export class CheckoutService {
     if (!dto.cardNumber || !dto.cardHolder || !dto.expiryMonth || !dto.expiryYear || !dto.cvv) {
       throw new BadRequestException('Preencha todos os dados do cartão');
     }
+  }
+
+  private createExternalReference(checkoutId?: string) {
+    const randomPart = randomUUID().replace(/-/g, '').slice(0, 20);
+    const checkoutPart = checkoutId ? `${checkoutId.replace(/-/g, '').slice(0, 12)}_` : '';
+    return `baas_${checkoutPart}${randomPart}`;
   }
 
   private readPaymentField(payment: Record<string, any>, keys: string[]) {

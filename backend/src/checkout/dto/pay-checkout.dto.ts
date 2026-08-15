@@ -52,4 +52,10 @@ export class PayCheckoutDto {
   @IsOptional()
   @IsString()
   brand?: string;
+
+  @ApiPropertyOptional({ example: 1990, description: 'Valor em centavos' })
+  @IsOptional()
+  @IsInt()
+  @Min(100)
+  amountCents?: number;
 }

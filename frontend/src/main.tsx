@@ -519,14 +519,14 @@ function PublicCheckout({ id }: { id: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeField, setActiveField] = useState('');
-  const [form, setForm] = useState({ email: '', payerDocument: '', cardNumber: '', cardHolder: '', expiryMonth: '', expiryYear: '', cvv: '', installments: 1 });
+  const [form, setForm] = useState({ email: '', payerDocument: '', amountCents: 0, cardNumber: '', cardHolder: '', expiryMonth: '', expiryYear: '', cvv: '', installments: 1 });
 
   async function loadCheckout() {
     const response = await fetch(`${apiBase}/checkout-links/${id}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Checkout nao encontrado');
     setCheckout(data);
-    setForm((current) => ({ ...current, email: current.email || data.customerEmail || '' }));
+    setForm((current) => ({ ...current, email: current.email || data.customerEmail || '', amountCents: current.amountCents || data.amountCents || 0 }));
     if (data.method === 'CARD') setMethod('CARD');
     if (data.method === 'PIX') setMethod('PIX');
     return data as Checkout;
@@ -543,6 +543,7 @@ function PublicCheckout({ id }: { id: string }) {
       const payload = {
         method,
         email: form.email,
+        amountCents: Number(form.amountCents),
         payerDocument: form.payerDocument.replace(/\D/g, ''),
         cardNumber: method === 'CARD' ? cardDigits(form.cardNumber) : undefined,
         cardHolder: method === 'CARD' ? form.cardHolder : undefined,
@@ -568,13 +569,14 @@ function PublicCheckout({ id }: { id: string }) {
   const allowedPix = checkout.method === 'PIX' || checkout.method === 'BOTH';
   const allowedCard = checkout.method === 'CARD' || checkout.method === 'BOTH';
   const paid = checkout.status === 'APPROVED';
+  const checkoutAmountCents = Number(form.amountCents || checkout.amountCents);
   const pixGenerated = method === 'PIX' && checkout.status === 'PENDING' && !!(checkout.emv || checkout.qrCodeBase64);
-  const canPay = form.email.includes('@') && [11, 14].includes(form.payerDocument.replace(/\D/g, '').length) && (method === 'PIX' || (cardDigits(form.cardNumber).length >= 13 && form.cardHolder.length >= 3 && form.expiryMonth.length === 2 && form.expiryYear.length === 4 && form.cvv.length >= 3));
+  const canPay = checkoutAmountCents >= 100 && form.email.includes('@') && [11, 14].includes(form.payerDocument.replace(/\D/g, '').length) && (method === 'PIX' || (cardDigits(form.cardNumber).length >= 13 && form.cardHolder.length >= 3 && form.expiryMonth.length === 2 && form.expiryYear.length === 4 && form.cvv.length >= 3));
 
   return <main className="public-checkout-shell">
     <header className="checkout-brand"><span className="brand-mark"><Sparkles size={18}/></span><strong>StoneVest Checkout</strong><span><LockKeyhole size={14}/> Ambiente seguro</span></header>
     <section className="public-checkout-card">
-      <aside className="order-summary"><span className="eyebrow">Resumo do pedido</span><h1>{checkout.description}</h1><div className="checkout-total"><span>Total</span><strong>{money(checkout.amountCents)}</strong></div><div className="order-safe"><ShieldCheck size={19}/><div><strong>Pagamento protegido</strong><small>Seus dados seguem direto para o processador.</small></div></div><small className="order-id">Pedido {checkout.id.slice(0, 8)}</small></aside>
+      <aside className="order-summary"><span className="eyebrow">Resumo do pedido</span><h1>{checkout.description}</h1><div className="checkout-total"><span>Total</span><strong>{money(checkoutAmountCents)}</strong></div><div className="order-safe"><ShieldCheck size={19}/><div><strong>Pagamento protegido</strong><small>Seus dados seguem direto para o processador.</small></div></div><small className="order-id">Pedido {checkout.id.slice(0, 8)}</small></aside>
       <section className="customer-payment">
         {paid ? <div className="payment-result approved-result"><span><Check size={28}/></span><h2>Pagamento aprovado</h2><p>Enviamos a atualizacao para {checkout.customerEmail}.</p></div> : pixGenerated ? <div className="pix-result"><span className="eyebrow">Pix gerado</span><h2>Escaneie para pagar</h2>{checkout.qrCodeBase64 && <img src={qrCodeSrc(checkout.qrCodeBase64)} alt="QR Code Pix"/>}{checkout.emv && <><textarea readOnly value={checkout.emv}/><button className="secondary-action" onClick={() => navigator.clipboard.writeText(checkout.emv || '')}><Copy size={16}/> Copiar codigo Pix</button></>}<p>Esta pagina sera atualizada quando o pagamento for confirmado.</p></div> : <>
           <div className="checkout-title"><div><span className="eyebrow">Dados do pagamento</span><h2>Como deseja pagar?</h2></div><span className={`status-badge ${checkout.status.toLowerCase()}`}>{statusLabel(checkout.status)}</span></div>
@@ -583,10 +585,11 @@ function PublicCheckout({ id }: { id: string }) {
           {method === 'CARD' && <InteractiveCard form={form} activeField={activeField}/>} 
           <div className="customer-fields">
             <label>E-mail para notificacoes<input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}/></label>
+            <label>Valor em centavos<input type="number" min="100" step="100" value={form.amountCents} onChange={(e) => setForm({ ...form, amountCents: Number(e.target.value) })}/></label>
             <label>CPF ou CNPJ<input inputMode="numeric" placeholder="Somente numeros" value={form.payerDocument} onChange={(e) => setForm({ ...form, payerDocument: e.target.value.replace(/\D/g, '').slice(0, 14) })}/></label>
-            {method === 'CARD' && <><label className="full-field">Numero do cartao<input inputMode="numeric" value={form.cardNumber.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim()} onFocus={() => setActiveField('number')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cardNumber: cardDigits(e.target.value) })}/></label><label className="full-field">Nome no cartao<input value={form.cardHolder} onFocus={() => setActiveField('holder')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cardHolder: e.target.value.toUpperCase().slice(0, 26) })}/></label><label>Validade (mes)<input inputMode="numeric" placeholder="MM" value={form.expiryMonth} onFocus={() => setActiveField('expiry')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value.replace(/\D/g, '').slice(0, 2) })}/></label><label>Validade (ano)<input inputMode="numeric" placeholder="AAAA" value={form.expiryYear} onFocus={() => setActiveField('expiry')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, expiryYear: e.target.value.replace(/\D/g, '').slice(0, 4) })}/></label><label>CVV<input type="password" inputMode="numeric" value={form.cvv} onFocus={() => setActiveField('cvv')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })}/></label><label>Parcelas<select value={form.installments} onChange={(e) => setForm({ ...form, installments: Number(e.target.value) })}>{Array.from({length: 12},(_,i)=><option value={i+1} key={i+1}>{i+1}x de {money(Math.ceil(checkout.amountCents/(i+1)))}</option>)}</select></label></>}
+            {method === 'CARD' && <><label className="full-field">Numero do cartao<input inputMode="numeric" value={form.cardNumber.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim()} onFocus={() => setActiveField('number')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cardNumber: cardDigits(e.target.value) })}/></label><label className="full-field">Nome no cartao<input value={form.cardHolder} onFocus={() => setActiveField('holder')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cardHolder: e.target.value.toUpperCase().slice(0, 26) })}/></label><label>Validade (mes)<input inputMode="numeric" placeholder="MM" value={form.expiryMonth} onFocus={() => setActiveField('expiry')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value.replace(/\D/g, '').slice(0, 2) })}/></label><label>Validade (ano)<input inputMode="numeric" placeholder="AAAA" value={form.expiryYear} onFocus={() => setActiveField('expiry')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, expiryYear: e.target.value.replace(/\D/g, '').slice(0, 4) })}/></label><label>CVV<input type="password" inputMode="numeric" value={form.cvv} onFocus={() => setActiveField('cvv')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })}/></label><label>Parcelas<select value={form.installments} onChange={(e) => setForm({ ...form, installments: Number(e.target.value) })}>{Array.from({length: 12},(_,i)=><option value={i+1} key={i+1}>{i+1}x de {money(Math.ceil(checkoutAmountCents/(i+1)))}</option>)}</select></label></>}
           </div>
-          <button className="pay-button" disabled={!canPay || loading} onClick={pay}>{loading ? <Loader2 className="spin" size={18}/> : method === 'PIX' ? <QrCode size={18}/> : <LockKeyhole size={18}/>} {loading ? 'Processando' : method === 'PIX' ? `Gerar Pix de ${money(checkout.amountCents)}` : `Pagar ${money(checkout.amountCents)}`}</button>
+          <button className="pay-button" disabled={!canPay || loading} onClick={pay}>{loading ? <Loader2 className="spin" size={18}/> : method === 'PIX' ? <QrCode size={18}/> : <LockKeyhole size={18}/>} {loading ? 'Processando' : method === 'PIX' ? `Gerar Pix de ${money(checkoutAmountCents)}` : `Pagar ${money(checkoutAmountCents)}`}</button>
         </>}
       </section>
     </section>
