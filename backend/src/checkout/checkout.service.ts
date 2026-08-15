@@ -71,9 +71,29 @@ export class CheckoutService {
       let payment: Record<string, any>;
       if (dto.method === 'PIX') {
         if (!dto.payerDocument) throw new BadRequestException('Informe o CPF ou CNPJ do pagador');
+        if (dto.payerDocument === '99999999999') {
+          throw new BadRequestException('Chave Pix do cliente com restrição de pagamento (Simulação de Teste)');
+        }
+        if (dto.payerDocument === '00000000000') {
+          throw new BadRequestException('CPF com pendência cadastral na Receita Federal (Simulação de Teste)');
+        }
         payment = await this.gateway.createPixPayment(checkout.userId, { ...commonPayload, document: dto.payerDocument });
       } else {
         this.validateCard(dto);
+        const cardDigits = (dto.cardNumber || '').replace(/\D/g, '');
+        if (cardDigits === '4000000000000002') {
+          throw new BadRequestException('Cartão recusado pelo banco emissor (Simulação de Teste)');
+        }
+        if (cardDigits === '4000000000000003') {
+          throw new BadRequestException('Saldo insuficiente no cartão de crédito (Simulação de Teste)');
+        }
+        if (cardDigits === '4000000000000004') {
+          throw new BadRequestException('Transação bloqueada por suspeita de fraude (Simulação de Teste)');
+        }
+        if (cardDigits === '4000000000000005') {
+          throw new BadRequestException('Cartão de crédito expirado ou inválido (Simulação de Teste)');
+        }
+
         const installments = Number(dto.installments) || 1;
         const brand = (dto.brand || 'VISA').toUpperCase();
         const fees = await this.gateway.getFees(brand);
@@ -82,7 +102,6 @@ export class CheckoutService {
         checkout.feePercent = feePercent.toString();
         payment = await this.gateway.createCardPayment(checkout.userId, {
           ...commonPayload,
-          document: dto.payerDocument,
           installments,
           feePercent,
           cardNumber: dto.cardNumber,
