@@ -37,7 +37,6 @@ export class CheckoutService {
       attempts: 0,
       lastAttemptAt: null
     });
-
     await this.checkoutLinks.save(checkout);
     return checkout;
   }
@@ -72,7 +71,7 @@ export class CheckoutService {
       let payment: Record<string, any>;
       if (dto.method === 'PIX') {
         if (!dto.payerDocument) throw new BadRequestException('Informe o CPF ou CNPJ do pagador');
-        payment = await this.gateway.createPixPayment(checkout.userId, { ...commonPayload, payerDocument: dto.payerDocument });
+        payment = await this.gateway.createPixPayment(checkout.userId, { ...commonPayload, payerDocument: dto.payerDocument, email: dto.email });
       } else {
         this.validateCard(dto);
         const installments = Number(dto.installments) || 1;
@@ -83,6 +82,8 @@ export class CheckoutService {
         checkout.feePercent = feePercent.toString();
         payment = await this.gateway.createCardPayment(checkout.userId, {
           ...commonPayload,
+          payerDocument: dto.payerDocument,
+          email: dto.email,
           installments,
           feePercent,
           cardNumber: dto.cardNumber,
