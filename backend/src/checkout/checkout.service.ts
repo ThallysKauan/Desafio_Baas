@@ -98,7 +98,7 @@ export class CheckoutService {
       const pixInfo = this.extractPixFields(paymentData);
       checkout.qrCodeBase64 = pixInfo.qrCodeBase64;
       checkout.emv = pixInfo.emv;
-      checkout.status = this.normalizeStatus(paymentData.status, 'PENDING');
+      checkout.status = this.normalizeStatus(paymentData.status, 'PENDING', dto.method === 'PIX');
       checkout.failureReason = checkout.status === 'DENIED'
         ? String(paymentData.reason || paymentData.message || paymentData.declineReason || 'Pagamento não autorizado')
         : null;
@@ -239,9 +239,20 @@ export class CheckoutService {
     return { emv, qrCodeBase64 };
   }
 
-  private normalizeStatus(status: unknown, fallback: CheckoutLink['status']): CheckoutLink['status'] {
+  private normalizeStatus(status: unknown, fallback: CheckoutLink['status'], isPix = false): CheckoutLink['status'] {
     const value = String(status || fallback).toUpperCase();
-    const aliases: Record<string, CheckoutLink['status']> = { PAID: 'APPROVED', SUCCESS: 'APPROVED', FAILED: 'DENIED', DECLINED: 'DENIED', REJECTED: 'DENIED', WAITING: 'PENDING' };
+    if (isPix && (value === 'SUCCESS' || value === 'CREATED' || value === 'ACTIVE' || value === 'OK')) {
+      return 'PENDING';
+    }
+    const aliases: Record<string, CheckoutLink['status']> = {
+      PAID: 'APPROVED',
+      CONFIRMED: 'APPROVED',
+      SUCCESS: isPix ? 'PENDING' : 'APPROVED',
+      FAILED: 'DENIED',
+      DECLINED: 'DENIED',
+      REJECTED: 'DENIED',
+      WAITING: 'PENDING'
+    };
     return aliases[value] || (['OPEN', 'PENDING', 'APPROVED', 'DENIED', 'EXPIRED', 'CANCELLED'].includes(value) ? value as CheckoutLink['status'] : fallback);
   }
 
