@@ -29,8 +29,24 @@ export class GatewayService {
 
   async loginGateway(userId: string) {
     const account = await this.gatewayAccounts.findOne({ where: { userId } });
-    const document = account?.document || this.config.get<string>('GATEWAY_DOCUMENT');
-    const password = account?.password || this.config.get<string>('GATEWAY_PASSWORD');
+    
+    let document = account?.document;
+    let password = account?.password;
+
+    // Fallback to env default credentials only if account has no credentials set AND env credentials exist
+    if (!document || !password) {
+      document = this.config.get<string>('GATEWAY_DOCUMENT');
+      password = this.config.get<string>('GATEWAY_PASSWORD');
+    }
+
+    // If still no credentials or user is custom and hasn't configured credentials, require user credentials
+    if (account && (!account.document || !account.password)) {
+      // Check if user is demo user or if custom credentials were provided
+      const user = await this.gatewayAccounts.manager.findOne('User' as any, { where: { id: userId } }) as any;
+      if (user && user.email !== 'admin@demo.com') {
+        throw new InternalServerErrorException('Configure suas credenciais do Gateway no final da página para visualizar seu saldo e transações.');
+      }
+    }
 
     if (!document || !password) {
       throw new InternalServerErrorException('Credenciais do gateway não configuradas para esta conta');
@@ -73,9 +89,11 @@ export class GatewayService {
 
   async getCredentials(userId: string) {
     const account = await this.gatewayAccounts.findOne({ where: { userId } });
-    const isConfigured = Boolean(account?.document || this.config.get('GATEWAY_DOCUMENT'));
+    const user = await this.gatewayAccounts.manager.findOne('User' as any, { where: { id: userId } }) as any;
+    const isDemo = user?.email === 'admin@demo.com';
+    const isConfigured = Boolean(account?.document || (isDemo && this.config.get('GATEWAY_DOCUMENT')));
     return {
-      document: account?.document ? `${account.document.substring(0, 3)}***` : (this.config.get('GATEWAY_DOCUMENT') ? 'Configurado (padrão)' : ''),
+      document: account?.document ? `${account.document.substring(0, 3)}***` : (isDemo ? 'Configurado (padrão demo)' : ''),
       isConfigured
     };
   }
