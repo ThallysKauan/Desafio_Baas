@@ -53,6 +53,9 @@ export class CheckoutService {
     if (checkout.method !== 'BOTH' && checkout.method !== dto.method) {
       throw new BadRequestException('Método de pagamento não permitido neste link');
     }
+    if (!this.isValidCpfOrCnpj(dto.payerDocument)) {
+      throw new BadRequestException('CPF ou CNPJ inválido');
+    }
 
     const externalReference = this.createExternalReference(checkout.id);
     const commonPayload = { amount: checkout.amountCents, description: checkout.description, externalReference };
@@ -156,6 +159,36 @@ export class CheckoutService {
     const randomPart = randomUUID().replace(/-/g, '').slice(0, 20);
     const checkoutPart = checkoutId ? `${checkoutId.replace(/-/g, '').slice(0, 12)}_` : '';
     return `baas_${checkoutPart}${randomPart}`;
+  }
+
+  private isValidCpfOrCnpj(value: string) {
+    const digits = value.replace(/\D/g, '');
+    if (/^(\d)\1+$/.test(digits)) return false;
+    if (digits.length === 11) return this.isValidCpf(digits);
+    if (digits.length === 14) return this.isValidCnpj(digits);
+    return false;
+  }
+
+  private isValidCpf(digits: string) {
+    const calculateDigit = (length: number) => {
+      const sum = digits
+        .slice(0, length)
+        .split('')
+        .reduce((total, digit, index) => total + Number(digit) * (length + 1 - index), 0);
+      const remainder = (sum * 10) % 11;
+      return remainder === 10 ? 0 : remainder;
+    };
+    return calculateDigit(9) === Number(digits[9]) && calculateDigit(10) === Number(digits[10]);
+  }
+
+  private isValidCnpj(digits: string) {
+    const calculateDigit = (weights: number[]) => {
+      const sum = weights.reduce((total, weight, index) => total + Number(digits[index]) * weight, 0);
+      const remainder = sum % 11;
+      return remainder < 2 ? 0 : 11 - remainder;
+    };
+    return calculateDigit([5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(digits[12])
+      && calculateDigit([6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(digits[13]);
   }
 
   private readPaymentField(payment: Record<string, any>, keys: string[]) {

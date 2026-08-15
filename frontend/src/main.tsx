@@ -98,6 +98,36 @@ function cardBrand(value: string) {
   return 'CARD';
 }
 
+function isValidCpfOrCnpj(value: string) {
+  const digits = value.replace(/\D/g, '');
+  if (/^(\d)\1+$/.test(digits)) return false;
+  if (digits.length === 11) return isValidCpf(digits);
+  if (digits.length === 14) return isValidCnpj(digits);
+  return false;
+}
+
+function isValidCpf(digits: string) {
+  const calculateDigit = (length: number) => {
+    const sum = digits
+      .slice(0, length)
+      .split('')
+      .reduce((total, digit, index) => total + Number(digit) * (length + 1 - index), 0);
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+  return calculateDigit(9) === Number(digits[9]) && calculateDigit(10) === Number(digits[10]);
+}
+
+function isValidCnpj(digits: string) {
+  const calculateDigit = (weights: number[]) => {
+    const sum = weights.reduce((total, weight, index) => total + Number(digits[index]) * weight, 0);
+    const remainder = sum % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+  return calculateDigit([5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(digits[12])
+    && calculateDigit([6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(digits[13]);
+}
+
 function checkoutUrl(id: string) {
   return `${window.location.origin}/checkout/${id}`;
 }
@@ -540,10 +570,14 @@ function PublicCheckout({ id }: { id: string }) {
     try {
       setLoading(true);
       setError('');
+      const payerDocument = form.payerDocument.replace(/\D/g, '');
+      if (!isValidCpfOrCnpj(payerDocument)) {
+        throw new Error('CPF ou CNPJ inválido');
+      }
       const payload = {
         method,
         email: form.email,
-        payerDocument: form.payerDocument.replace(/\D/g, ''),
+        payerDocument,
         cardNumber: method === 'CARD' ? cardDigits(form.cardNumber) : undefined,
         cardHolder: method === 'CARD' ? form.cardHolder : undefined,
         expiryMonth: method === 'CARD' ? form.expiryMonth.padStart(2, '0') : undefined,
@@ -569,8 +603,11 @@ function PublicCheckout({ id }: { id: string }) {
   const allowedCard = checkout.method === 'CARD' || checkout.method === 'BOTH';
   const paid = checkout.status === 'APPROVED';
   const checkoutAmountCents = Number(checkout.amountCents);
+  const payerDocument = form.payerDocument.replace(/\D/g, '');
+  const payerDocumentComplete = [11, 14].includes(payerDocument.length);
+  const payerDocumentValid = isValidCpfOrCnpj(payerDocument);
   const pixGenerated = method === 'PIX' && checkout.status === 'PENDING' && !!(checkout.emv || checkout.qrCodeBase64);
-  const canPay = form.email.includes('@') && [11, 14].includes(form.payerDocument.replace(/\D/g, '').length) && (method === 'PIX' || (cardDigits(form.cardNumber).length >= 13 && form.cardHolder.length >= 3 && form.expiryMonth.length === 2 && form.expiryYear.length === 4 && form.cvv.length >= 3));
+  const canPay = form.email.includes('@') && payerDocumentValid && (method === 'PIX' || (cardDigits(form.cardNumber).length >= 13 && form.cardHolder.length >= 3 && form.expiryMonth.length === 2 && form.expiryYear.length === 4 && form.cvv.length >= 3));
 
   return <main className="public-checkout-shell">
     <header className="checkout-brand"><span className="brand-mark"><Sparkles size={18}/></span><strong>StoneVest Checkout</strong><span><LockKeyhole size={14}/> Ambiente seguro</span></header>
@@ -584,7 +621,7 @@ function PublicCheckout({ id }: { id: string }) {
           {method === 'CARD' && <InteractiveCard form={form} activeField={activeField}/>} 
           <div className="customer-fields">
             <label>E-mail para notificacoes<input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}/></label>
-            <label>CPF ou CNPJ<input inputMode="numeric" placeholder="Somente numeros" value={form.payerDocument} onChange={(e) => setForm({ ...form, payerDocument: e.target.value.replace(/\D/g, '').slice(0, 14) })}/></label>
+            <label>CPF ou CNPJ<input inputMode="numeric" placeholder="Documento valido" value={form.payerDocument} onChange={(e) => setForm({ ...form, payerDocument: e.target.value.replace(/\D/g, '').slice(0, 14) })}/>{payerDocumentComplete && !payerDocumentValid && <small className="field-error">CPF ou CNPJ invalido</small>}</label>
             {method === 'CARD' && <><label className="full-field">Numero do cartao<input inputMode="numeric" value={form.cardNumber.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim()} onFocus={() => setActiveField('number')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cardNumber: cardDigits(e.target.value) })}/></label><label className="full-field">Nome no cartao<input value={form.cardHolder} onFocus={() => setActiveField('holder')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cardHolder: e.target.value.toUpperCase().slice(0, 26) })}/></label><label>Validade (mes)<input inputMode="numeric" placeholder="MM" value={form.expiryMonth} onFocus={() => setActiveField('expiry')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, expiryMonth: e.target.value.replace(/\D/g, '').slice(0, 2) })}/></label><label>Validade (ano)<input inputMode="numeric" placeholder="AAAA" value={form.expiryYear} onFocus={() => setActiveField('expiry')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, expiryYear: e.target.value.replace(/\D/g, '').slice(0, 4) })}/></label><label>CVV<input type="password" inputMode="numeric" value={form.cvv} onFocus={() => setActiveField('cvv')} onBlur={() => setActiveField('')} onChange={(e) => setForm({ ...form, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })}/></label><label>Parcelas<select value={form.installments} onChange={(e) => setForm({ ...form, installments: Number(e.target.value) })}>{Array.from({length: 12},(_,i)=><option value={i+1} key={i+1}>{i+1}x de {money(Math.ceil(checkoutAmountCents/(i+1)))}</option>)}</select></label></>}
           </div>
           <button className="pay-button" disabled={!canPay || loading} onClick={pay}>{loading ? <Loader2 className="spin" size={18}/> : method === 'PIX' ? <QrCode size={18}/> : <LockKeyhole size={18}/>} {loading ? 'Processando' : method === 'PIX' ? `Gerar Pix de ${money(checkoutAmountCents)}` : `Pagar ${money(checkoutAmountCents)}`}</button>
