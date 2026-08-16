@@ -15,7 +15,6 @@ import {
   QrCode,
   RefreshCcw,
   ShieldCheck,
-  Sparkles,
   Wifi,
   Check,
   LockKeyhole,
@@ -344,11 +343,11 @@ function App() {
       <main className="auth-shell">
         <section className="auth-visual">
           <div className="brand-lockup">
-            <span className="brand-mark"><Sparkles size={18} /></span>
+            <span className="brand-mark"><Landmark size={18} /></span>
             <span>StoneVest BaaS</span>
           </div>
-          <h1>Carteira, checkout e gateway em um cockpit financeiro.</h1>
-          <p>Painel BaaS conectado ao Lera Box para Pix, cartao, saques, extrato e conciliacao.</p>
+          <h1>Painel de pagamentos e carteira digital.</h1>
+          <p>Gerencie cobranças, saldo, saques e extrato em um só lugar.</p>
           <div className="trust-row">
             <span><ShieldCheck size={16} /> Tokens no backend</span>
             <span><BadgeCheck size={16} /> MySQL proprio</span>
@@ -388,7 +387,7 @@ function App() {
     <main className="dashboard-shell">
       <aside className="sidebar">
         <div className="brand-lockup">
-          <span className="brand-mark"><Sparkles size={18} /></span>
+          <span className="brand-mark"><Landmark size={18} /></span>
           <span>StoneVest BaaS</span>
         </div>
         <nav>
@@ -404,7 +403,7 @@ function App() {
       <section className="workspace" id="overview">
         <header className="topbar">
           <div>
-            <span className="eyebrow">Gateway Lera Box</span>
+            <span className="eyebrow">Painel financeiro</span>
             <h1>Central de pagamentos</h1>
           </div>
           <button className="secondary-action" onClick={loadDashboard} disabled={loading}>
@@ -439,11 +438,11 @@ function App() {
 
             <div className="link-builder-stage">
               <div className="stage-copy">
-                <span className="live-status"><i></i> Checkout hospedado</span>
-                <h3>Crie o link. O cliente conclui.</h3>
-                <p>Os dados de CPF e cartao sao preenchidos pelo pagador em uma pagina publica e segura.</p>
+                <span className="live-status"><i></i> Link ativo</span>
+                <h3>Crie a cobrança e compartilhe.</h3>
+                <p>O pagador informa os dados na página de checkout.</p>
               </div>
-              <div className="link-builder-visual"><LinkIcon size={28}/><span>checkout seguro</span><strong>{money(Number(form.amountCents))}</strong><small>{form.method === 'BOTH' ? 'Pix ou cartao' : form.method}</small></div>
+              <div className="link-builder-visual"><LinkIcon size={28}/><span>link de pagamento</span><strong>{money(Number(form.amountCents))}</strong><small>{form.method === 'BOTH' ? 'Pix ou cartao' : form.method}</small></div>
             </div>
 
             <div className="form-grid">
@@ -578,7 +577,7 @@ function App() {
         </section>
 
       </section>
-      {loading && <div className="gateway-loader" role="status"><div className="loader-core"><span></span><LockKeyhole size={24} /></div><strong>Conectando ao gateway</strong><small>Criptografando e validando a transacao</small></div>}
+      {loading && <div className="gateway-loader" role="status"><div className="loader-core"><span></span><Loader2 size={24} /></div><strong>Processando</strong><small>Aguarde alguns instantes</small></div>}
     </main>
   );
 }
@@ -636,7 +635,7 @@ function PublicCheckout({ id }: { id: string }) {
     } finally { setLoading(false); }
   }
 
-  if (loading && !checkout) return <main className="public-checkout-shell"><div className="checkout-loading"><Loader2 className="spin"/><strong>Carregando checkout seguro</strong></div></main>;
+  if (loading && !checkout) return <main className="public-checkout-shell"><div className="checkout-loading"><Loader2 className="spin"/><strong>Carregando pagamento</strong></div></main>;
   if (!checkout) return <main className="public-checkout-shell"><div className="checkout-not-found"><AlertCircle/><h1>Link indisponivel</h1><p>{error}</p></div></main>;
 
   const allowedPix = checkout.method === 'PIX' || checkout.method === 'BOTH';
@@ -653,44 +652,13 @@ function PublicCheckout({ id }: { id: string }) {
   const canPay = form.email.includes('@') && payerDocumentValid && (method === 'PIX' || (cardDigits(form.cardNumber).length >= 13 && form.cardHolder.length >= 3 && form.expiryMonth.length === 2 && form.expiryYear.length === 4 && form.cvv.length >= 3));
 
   return <main className="public-checkout-shell">
-    <header className="checkout-brand"><span className="brand-mark"><Sparkles size={18}/></span><strong>StoneVest Checkout</strong><span><LockKeyhole size={14}/> Ambiente seguro</span></header>
+    <header className="checkout-brand"><span className="brand-mark"><Landmark size={18}/></span><strong>StoneVest Checkout</strong><span><LockKeyhole size={14}/> Pagamento seguro</span></header>
     <section className="public-checkout-card">
       <aside className="order-summary"><span className="eyebrow">Resumo do pedido</span><h1>{checkout.description}</h1><div className="checkout-total"><span>Total</span><strong>{money(checkoutAmountCents)}</strong></div><div className="order-safe"><ShieldCheck size={19}/><div><strong>Pagamento protegido</strong><small>Seus dados seguem direto para o processador.</small></div></div><small className="order-id">Pedido {checkout.id.slice(0, 8)}</small></aside>
       <section className="customer-payment">
         {pixGenerated ? <div className="pix-result"><span className="eyebrow">Pix gerado</span><h2>Escaneie para pagar</h2>{pixQr && <img src={qrCodeSrc(pixQr)} alt="QR Code Pix"/>}{pixEmv && <><textarea readOnly value={pixEmv}/><button className="secondary-action" onClick={() => navigator.clipboard.writeText(pixEmv || '')}><Copy size={16}/> Copiar codigo Pix</button></>}<p>Esta pagina sera atualizada quando o pagamento for confirmado.</p></div> : paid ? <div className="payment-result approved-result"><span><Check size={28}/></span><h2>Pagamento aprovado</h2><p>Enviamos a atualizacao para {checkout.customerEmail}.</p></div> : <>
           <div className="checkout-title"><div><span className="eyebrow">Dados do pagamento</span><h2>Como deseja pagar?</h2></div><span className={`status-badge ${checkout.status.toLowerCase()}`}>{statusLabel(checkout.status)}</span></div>
           {(checkout.failureReason || error) && <div className="decline-notice"><AlertCircle size={19}/><div><strong>Pagamento nao aprovado</strong><p>{checkout.failureReason || error}</p><small>Revise os dados e tente novamente neste mesmo link.</small></div></div>}
-          <div className="sandbox-test-bar" style={{ background: '#f8f6fd', border: '1px dashed #7158c8', borderRadius: 8, padding: '12px 14px', marginBottom: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <strong style={{ fontSize: 12, color: '#7158c8' }}>🧪 Atalhos para Testar Cenários (Clique para preencher)</strong>
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button type="button" style={{ background: '#fff', border: '1px solid #dcd7f5', borderRadius: 5, padding: '4px 8px', fontSize: 11, fontWeight: 700, color: '#333', cursor: 'pointer' }}
-                onClick={() => { setMethod('PIX'); setForm(f => ({ ...f, email: 'teste.pix@cliente.com', payerDocument: '12345678901' })); }}>
-                ⚡ Pix Aprovado / Gerado
-              </button>
-              <button type="button" style={{ background: '#fff', border: '1px solid #fecaca', borderRadius: 5, padding: '4px 8px', fontSize: 11, fontWeight: 700, color: '#991b1b', cursor: 'pointer' }}
-                onClick={() => { setMethod('PIX'); setForm(f => ({ ...f, email: 'pix.recusado@cliente.com', payerDocument: '99999999999' })); }}>
-                ⚡ Pix Recusado
-              </button>
-              <button type="button" style={{ background: '#fff', border: '1px solid #bbf7d0', borderRadius: 5, padding: '4px 8px', fontSize: 11, fontWeight: 700, color: '#166534', cursor: 'pointer' }}
-                onClick={() => { setMethod('CARD'); setForm(f => ({ ...f, email: 'aprovado.cartao@cliente.com', payerDocument: '12345678901', cardNumber: '4111111111111111', cardHolder: 'APROVADO TESTE', expiryMonth: '12', expiryYear: '2030', cvv: '123' })); }}>
-                💳 Cartão Aprovado
-              </button>
-              <button type="button" style={{ background: '#fff', border: '1px solid #fed7aa', borderRadius: 5, padding: '4px 8px', fontSize: 11, fontWeight: 700, color: '#9a3412', cursor: 'pointer' }}
-                onClick={() => { setMethod('CARD'); setForm(f => ({ ...f, email: 'saldo.insuficiente@cliente.com', payerDocument: '12345678901', cardNumber: '4000000000000003', cardHolder: 'SALDO INSUFICIENTE', expiryMonth: '08', expiryYear: '2028', cvv: '321' })); }}>
-                💳 Saldo Insuficiente
-              </button>
-              <button type="button" style={{ background: '#fff', border: '1px solid #fecaca', borderRadius: 5, padding: '4px 8px', fontSize: 11, fontWeight: 700, color: '#991b1b', cursor: 'pointer' }}
-                onClick={() => { setMethod('CARD'); setForm(f => ({ ...f, email: 'recusado.cartao@cliente.com', payerDocument: '12345678901', cardNumber: '4000000000000002', cardHolder: 'CARTAO RECUSADO', expiryMonth: '05', expiryYear: '2027', cvv: '999' })); }}>
-                💳 Cartão Recusado
-              </button>
-              <button type="button" style={{ background: '#fff', border: '1px solid #e9d5ff', borderRadius: 5, padding: '4px 8px', fontSize: 11, fontWeight: 700, color: '#6b21a8', cursor: 'pointer' }}
-                onClick={() => { setMethod('CARD'); setForm(f => ({ ...f, email: 'bloqueado.cartao@cliente.com', payerDocument: '12345678901', cardNumber: '4000000000000004', cardHolder: 'SUSPEITA DE FRAUDE', expiryMonth: '11', expiryYear: '2029', cvv: '777' })); }}>
-                ⛔ Cartão Bloqueado
-              </button>
-            </div>
-          </div>
           <div className="method-switch customer-methods">{allowedPix && <button className={method === 'PIX' ? 'selected' : ''} onClick={() => setMethod('PIX')}><QrCode size={17}/> Pix</button>}{allowedCard && <button className={method === 'CARD' ? 'selected' : ''} onClick={() => setMethod('CARD')}><CreditCard size={17}/> Cartao</button>}</div>
           {method === 'CARD' && <InteractiveCard form={form} activeField={activeField}/>} 
           <div className="customer-fields">

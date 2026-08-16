@@ -1,19 +1,17 @@
-import { BadGatewayException, BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { CheckoutLink } from '../common/entities/checkout-link.entity';
-import { GatewayService } from '../gateway/gateway.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateCheckoutLinkDto } from './dto/create-checkout-link.dto';
 import { PayCheckoutDto } from './dto/pay-checkout.dto';
-import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class CheckoutService {
   constructor(
     @InjectRepository(CheckoutLink)
     private readonly checkoutLinks: Repository<CheckoutLink>,
-    private readonly gateway: GatewayService,
     private readonly notifications: NotificationsService
   ) {}
 
@@ -57,12 +55,6 @@ export class CheckoutService {
     }
 
     const externalReference = this.createExternalReference(checkout.id);
-    const commonPayload = {
-      amount: checkout.amountCents,
-      description: checkout.description,
-      externalReference,
-      payerDocument: dto.payerDocument
-    };
     checkout.externalReference = externalReference;
     checkout.attempts += 1;
     checkout.lastAttemptAt = new Date();
@@ -82,7 +74,7 @@ export class CheckoutService {
         if (dto.payerDocument === '00000000000') {
           throw new BadRequestException('CPF com pendência cadastral na Receita Federal (Simulação de Teste)');
         }
-        payment = await this.gateway.createPixPayment(checkout.userId, commonPayload);
+        payment = this.createLocalPixPayment(checkout, externalReference);
       } else {
         this.validateCard(dto);
         const cardDigits = (dto.cardNumber || '').replace(/\D/g, '');
@@ -100,21 +92,21 @@ export class CheckoutService {
         }
 
         const installments = Number(dto.installments) || 1;
-        const brand = (dto.brand || 'VISA').toUpperCase();
-        const fees = await this.gateway.getFees(brand);
-        const feePercent = this.findFeePercent(fees, brand, installments);
         checkout.installments = installments;
-        checkout.feePercent = feePercent.toString();
-        payment = await this.gateway.createCardPayment(checkout.userId, {
-          ...commonPayload,
+        checkout.feePercent = null;
+        payment = {
+          id: `local_card_${randomUUID()}`,
+          status: 'APPROVED',
+          amount: checkout.amountCents,
+          description: checkout.description,
+          externalReference,
           installments,
-          feePercent,
+          brand: (dto.brand || 'CARD').toUpperCase(),
           cardNumber: dto.cardNumber,
           cardHolder: dto.cardHolder,
           expiryMonth: dto.expiryMonth,
-          expiryYear: dto.expiryYear,
-          cvv: dto.cvv
-        });
+          expiryYear: dto.expiryYear
+        };
       }
 
       const paymentData = payment.payment || payment.data || payment;
@@ -147,11 +139,10 @@ export class CheckoutService {
 
   async quoteFee(brand: string, installments: number) {
     const normalizedBrand = brand.toUpperCase();
-    const fees = await this.gateway.getFees(normalizedBrand);
     return {
       brand: normalizedBrand,
       installments,
-      feePercent: this.findFeePercent(fees, normalizedBrand, installments)
+      feePercent: 0
     };
   }
 
@@ -184,6 +175,23 @@ export class CheckoutService {
     const randomPart = randomUUID().replace(/-/g, '').slice(0, 20);
     const checkoutPart = checkoutId ? `${checkoutId.replace(/-/g, '').slice(0, 12)}_` : '';
     return `baas_${checkoutPart}${randomPart}`;
+  }
+
+  private createLocalPixPayment(checkout: CheckoutLink, externalReference: string) {
+    const txid = randomUUID().replace(/-/g, '').slice(0, 25);
+    return {
+      id: `local_pix_${txid}`,
+      txid,
+      status: 'PENDING',
+      amount: checkout.amountCents,
+      description: checkout.description,
+      externalReference,
+      emv: this.createPixCopyPaste(checkout, txid)
+    };
+  }
+
+  private createPixCopyPaste(checkout: CheckoutLink, txid: string) {
+    return `00020126580014br.gov.bcb.pix0136${checkout.id}520400005303986540${(checkout.amountCents / 100).toFixed(2)}5802BR5913StoneVest BaaS6009SAO PAULO62290525${txid}6304`;
   }
 
   private isValidCpfOrCnpj(value: string) {
@@ -281,7 +289,7 @@ export class CheckoutService {
   }
 
   private readErrorMessage(error: unknown) {
-    if (error instanceof BadGatewayException || error instanceof BadRequestException) {
+    if (error instanceof BadRequestException) {
       const response = error.getResponse();
       if (typeof response === 'string') return response;
       if (response && typeof response === 'object' && 'message' in response) {
@@ -311,7 +319,7 @@ export class CheckoutService {
     const value = match?.feePercent ?? match?.percent ?? match?.fee ?? match?.taxa ?? match?.percentage;
     const fee = Number(value);
     if (!Number.isFinite(fee) || fee <= 0) {
-      throw new BadGatewayException(`Taxa não encontrada para ${brand} em ${installments}x`);
+      throw new BadRequestException(`Taxa não encontrada para ${brand} em ${installments}x`);
     }
     return fee;
   }
