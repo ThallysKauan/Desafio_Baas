@@ -902,6 +902,14 @@ input[readonly] { color:#75b8ff; cursor:default; }
 .customer-methods button { color:#767b90; }
 .customer-methods button.selected { color:#fff; background:var(--checkout-purple); box-shadow:0 8px 20px rgba(113,88,200,.2); }
 .customer-payment .card-scene { width:min(100%,390px); justify-self:center; }
+.test-card-panel { display:grid; gap:10px; padding:12px; border:1px solid #e1e4ec; border-radius:8px; background:#f8f9fc; }
+.test-card-panel > div:first-child { display:grid; gap:2px; }
+.test-card-panel strong { color:#383b4c; font-size:12px; }
+.test-card-panel span { color:#74798c; font-size:10px; font-weight:700; }
+.test-card-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+.test-card-list button { min-width:0; display:grid; gap:3px; justify-items:start; padding:8px 9px; border:1px solid #dfe3ec; border-radius:7px; color:#383b4c; background:#fff; cursor:pointer; }
+.test-card-list button:hover { border-color:#b7c4d4; background:#f3f6fa; }
+.test-card-list button strong { font-family:"Cascadia Mono","SFMono-Regular",monospace; font-size:10px; font-weight:700; }
 .customer-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
 .customer-fields label { color:#656a7f; }
 .customer-fields input,.customer-fields select,.pix-result textarea { color:#2f3141; border-color:#e1e4ec; background:#f8f9fc; }

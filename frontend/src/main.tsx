@@ -650,6 +650,27 @@ function PublicCheckout({ id }: { id: string }) {
   const pixQr = (checkout.qrCodeBase64 && !checkout.qrCodeBase64.startsWith('000201')) ? checkout.qrCodeBase64 : pixEmv;
   const pixGenerated = method === 'PIX' && !!(pixEmv || pixQr);
   const canPay = form.email.includes('@') && payerDocumentValid && (method === 'PIX' || (cardDigits(form.cardNumber).length >= 13 && form.cardHolder.length >= 3 && form.expiryMonth.length === 2 && form.expiryYear.length === 4 && form.cvv.length >= 3));
+  const testCards = [
+    { label: 'Aprovado', cardNumber: '4111111111111111', holder: 'CLIENTE TESTE', month: '12', year: '2030', cvv: '123' },
+    { label: 'Recusado', cardNumber: '4000000000000002', holder: 'CARTAO RECUSADO', month: '05', year: '2027', cvv: '999' },
+    { label: 'Saldo insuficiente', cardNumber: '4000000000000003', holder: 'SALDO INSUFICIENTE', month: '08', year: '2028', cvv: '321' },
+    { label: 'Bloqueado', cardNumber: '4000000000000004', holder: 'SUSPEITA DE FRAUDE', month: '11', year: '2029', cvv: '777' },
+    { label: 'Expirado', cardNumber: '4000000000000005', holder: 'CARTAO EXPIRADO', month: '01', year: '2026', cvv: '555' }
+  ];
+
+  function fillTestCard(card: typeof testCards[number]) {
+    setMethod('CARD');
+    setForm((current) => ({
+      ...current,
+      email: current.email || 'cliente@teste.com',
+      payerDocument: current.payerDocument || '12345678901',
+      cardNumber: card.cardNumber,
+      cardHolder: card.holder,
+      expiryMonth: card.month,
+      expiryYear: card.year,
+      cvv: card.cvv
+    }));
+  }
 
   return <main className="public-checkout-shell">
     <header className="checkout-brand"><span className="brand-mark"><Landmark size={18}/></span><strong>StoneVest Checkout</strong><span><LockKeyhole size={14}/> Pagamento seguro</span></header>
@@ -661,6 +682,22 @@ function PublicCheckout({ id }: { id: string }) {
           {(checkout.failureReason || error) && <div className="decline-notice"><AlertCircle size={19}/><div><strong>Pagamento nao aprovado</strong><p>{checkout.failureReason || error}</p><small>Revise os dados e tente novamente neste mesmo link.</small></div></div>}
           <div className="method-switch customer-methods">{allowedPix && <button className={method === 'PIX' ? 'selected' : ''} onClick={() => setMethod('PIX')}><QrCode size={17}/> Pix</button>}{allowedCard && <button className={method === 'CARD' ? 'selected' : ''} onClick={() => setMethod('CARD')}><CreditCard size={17}/> Cartao</button>}</div>
           {method === 'CARD' && <InteractiveCard form={form} activeField={activeField}/>} 
+          {method === 'CARD' && (
+            <div className="test-card-panel">
+              <div>
+                <strong>Cartoes de teste</strong>
+                <span>Use apenas no ambiente de desenvolvimento.</span>
+              </div>
+              <div className="test-card-list">
+                {testCards.map((card) => (
+                  <button type="button" key={card.cardNumber} onClick={() => fillTestCard(card)}>
+                    <span>{card.label}</span>
+                    <strong>{card.cardNumber.replace(/(.{4})/g, '$1 ').trim()}</strong>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="customer-fields">
             <label>E-mail para notificacoes<input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}/></label>
             <label>CPF ou CNPJ<input inputMode="numeric" placeholder="Documento valido" value={form.payerDocument} onChange={(e) => setForm({ ...form, payerDocument: e.target.value.replace(/\D/g, '').slice(0, 14) })}/>{payerDocumentComplete && !payerDocumentValid && <small className="field-error">CPF ou CNPJ invalido</small>}</label>
