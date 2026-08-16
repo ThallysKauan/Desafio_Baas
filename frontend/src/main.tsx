@@ -241,22 +241,16 @@ function App() {
       const query = new URLSearchParams({ limit: String(transactionFilters.limit) });
       if (transactionFilters.status) query.set('status', transactionFilters.status);
       if (transactionFilters.type) query.set('type', transactionFilters.type);
-      const [checkoutData, withdrawalData, credsData] = await Promise.all([
+      const [checkoutData, walletData, transactionData, withdrawalData, credsData] = await Promise.all([
         request('/checkout-links', { headers }),
+        request('/wallet', { headers }).catch((error) => ({ error: error.message })),
+        request(`/wallet/transactions?${query}`, { headers }).catch(() => []),
         request('/withdrawals', { headers }).catch(() => []),
         request('/gateway/credentials', { headers }).catch(() => null)
       ]);
-
-      const hasGatewayCredentials = Boolean(credsData?.isConfigured);
-      const [walletData, transactionData, webhookData] = hasGatewayCredentials ? await Promise.all([
-        request('/wallet', { headers }).catch((error) => ({ error: error.message })),
-        request(`/wallet/transactions?${query}`, { headers }).catch(() => []),
-        request('/gateway/webhooks', { headers }).catch(() => [])
-      ]) : [
-        { balanceCents: 0 },
-        [],
-        []
-      ];
+      const webhookData = credsData?.isConfigured
+        ? await request('/gateway/webhooks', { headers }).catch(() => [])
+        : [];
 
       setCheckouts(checkoutData);
       setWallet(walletData);
@@ -446,7 +440,7 @@ function App() {
         {message && <div className="notice"><Check size={16} />{message}</div>}
 
         <section className="metrics-grid">
-          <Metric loading={loading && !checkouts.length} icon={<Wallet size={22} />} label="Carteira" value={walletValue(wallet)} detail="Saldo do gateway" />
+          <Metric loading={loading && !checkouts.length} icon={<Wallet size={22} />} label="Carteira" value={walletValue(wallet)} detail="Saldo do banco de dados" />
           <Metric loading={loading && !checkouts.length} icon={<LinkIcon size={22} />} label="Links" value={String(checkouts.length)} detail={`${pendingCount} pendentes`} />
           <Metric loading={loading && !checkouts.length} icon={<CreditCard size={22} />} label="Aprovados" value={String(approvedCount)} detail={`${transactions.length} transacoes`} />
         </section>
@@ -609,12 +603,12 @@ function App() {
 
         <section className="webhook-console" id="credentials" style={{ marginTop: 24 }}>
           <div className="webhook-intro">
-            <span className="eyebrow">Configuracao do Gateway</span>
+            <span className="eyebrow">Integracao opcional</span>
             <h2>Credenciais do Gateway (Lera Box)</h2>
-            <p>Insira o Documento (CPF/CNPJ) e Senha da sua conta do Gateway para ter acesso individualizado ao seu saldo e transacoes.</p>
+            <p>Use estas credenciais somente para conectar serviços externos do Gateway. O saldo da carteira é calculado pelo banco de dados deste sistema.</p>
             {credsInfo && (
               <div style={{ marginTop: 12, fontSize: 13, color: 'var(--muted)' }}>
-                Status atual: <strong>{credsInfo.isConfigured ? `Configurado (${credsInfo.document})` : 'Carteira nao configurada'}</strong>
+                Status atual: <strong>{credsInfo.isConfigured ? `Configurado (${credsInfo.document})` : 'Gateway nao configurado'}</strong>
               </div>
             )}
           </div>
