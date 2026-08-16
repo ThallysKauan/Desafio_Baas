@@ -169,8 +169,6 @@ function App() {
     cvv: '123'
   });
   const [withdrawal, setWithdrawal] = useState({ amountCents: 1000, pixKey: '' });
-  const [gatewayCreds, setGatewayCreds] = useState({ document: '', password: '' });
-  const [credsInfo, setCredsInfo] = useState<{ document: string; isConfigured: boolean } | null>(null);
 
   const headers = useMemo(() => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }), [token]);
   const approvedCount = checkouts.filter((item) => item.status === 'APPROVED').length;
@@ -241,23 +239,19 @@ function App() {
       const query = new URLSearchParams({ limit: String(transactionFilters.limit) });
       if (transactionFilters.status) query.set('status', transactionFilters.status);
       if (transactionFilters.type) query.set('type', transactionFilters.type);
-      const [checkoutData, walletData, transactionData, withdrawalData, credsData] = await Promise.all([
+      const [checkoutData, walletData, transactionData, webhookData, withdrawalData] = await Promise.all([
         request('/checkout-links', { headers }),
         request('/wallet', { headers }).catch((error) => ({ error: error.message })),
         request(`/wallet/transactions?${query}`, { headers }).catch(() => []),
-        request('/withdrawals', { headers }).catch(() => []),
-        request('/gateway/credentials', { headers }).catch(() => null)
+        request('/gateway/webhooks', { headers }).catch(() => []),
+        request('/withdrawals', { headers }).catch(() => [])
       ]);
-      const webhookData = credsData?.isConfigured
-        ? await request('/gateway/webhooks', { headers }).catch(() => [])
-        : [];
 
       setCheckouts(checkoutData);
       setWallet(walletData);
       setTransactions(Array.isArray(transactionData) ? transactionData : transactionData.items || []);
       setWebhooks(Array.isArray(webhookData) ? webhookData : webhookData.items || []);
       setWithdrawals(Array.isArray(withdrawalData) ? withdrawalData : []);
-      if (credsData) setCredsInfo(credsData);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Erro ao carregar dados');
     } finally {
@@ -319,24 +313,6 @@ function App() {
       await loadDashboard();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Erro ao solicitar saque');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function saveGatewayCredentials() {
-    try {
-      setLoading(true);
-      await request('/gateway/credentials', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(gatewayCreds)
-      });
-      setMessage('Credenciais do gateway atualizadas.');
-      setGatewayCreds({ document: '', password: '' });
-      await loadDashboard();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro ao salvar credenciais');
     } finally {
       setLoading(false);
     }
@@ -601,27 +577,6 @@ function App() {
           </div>
         </section>
 
-        <section className="webhook-console" id="credentials" style={{ marginTop: 24 }}>
-          <div className="webhook-intro">
-            <span className="eyebrow">Integracao opcional</span>
-            <h2>Credenciais do Gateway (Lera Box)</h2>
-            <p>Use estas credenciais somente para conectar serviços externos do Gateway. O saldo da carteira é calculado pelo banco de dados deste sistema.</p>
-            {credsInfo && (
-              <div style={{ marginTop: 12, fontSize: 13, color: 'var(--muted)' }}>
-                Status atual: <strong>{credsInfo.isConfigured ? `Configurado (${credsInfo.document})` : 'Gateway nao configurado'}</strong>
-              </div>
-            )}
-          </div>
-          <div className="webhook-manager">
-            <div className="webhook-form" style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
-              <label>Documento (CPF / CNPJ)<input placeholder="Ex: 12345678900" value={gatewayCreds.document} onChange={(e) => setGatewayCreds({ ...gatewayCreds, document: e.target.value })} /></label>
-              <label>Senha do Gateway<input type="password" placeholder="Sua senha do gateway" value={gatewayCreds.password} onChange={(e) => setGatewayCreds({ ...gatewayCreds, password: e.target.value })} /></label>
-              <button className="primary-action" onClick={saveGatewayCredentials} disabled={loading || !gatewayCreds.document.trim() || !gatewayCreds.password.trim()}>
-                <LockKeyhole size={17} /> Salvar Credenciais
-              </button>
-            </div>
-          </div>
-        </section>
       </section>
       {loading && <div className="gateway-loader" role="status"><div className="loader-core"><span></span><LockKeyhole size={24} /></div><strong>Conectando ao gateway</strong><small>Criptografando e validando a transacao</small></div>}
     </main>
