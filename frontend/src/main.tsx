@@ -604,7 +604,7 @@ function App() {
             <p>Insira o Documento (CPF/CNPJ) e Senha da sua conta do Gateway para ter acesso individualizado ao seu saldo e transacoes.</p>
             {credsInfo && (
               <div style={{ marginTop: 12, fontSize: 13, color: 'var(--muted)' }}>
-                Status atual: <strong>{credsInfo.isConfigured ? `Configurado (${credsInfo.document})` : 'Usando conta padrao'}</strong>
+                Status atual: <strong>{credsInfo.isConfigured ? `Configurado (${credsInfo.document})` : 'Carteira nao configurada'}</strong>
               </div>
             )}
           </div>

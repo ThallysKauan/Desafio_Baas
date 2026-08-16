@@ -21,7 +21,15 @@ export class GatewayService {
 
   async getAccessToken(userId: string) {
     const current = await this.gatewayAccounts.findOne({ where: { userId } });
-    if (current?.accessToken) {
+    if (current && await this.isDefaultAccountForNonDemoUser(userId, current)) {
+      await this.gatewayAccounts.update({ id: current.id }, {
+        document: null,
+        password: null,
+        customerCode: null,
+        storeKey: null,
+        accessToken: null
+      });
+    } else if (current?.accessToken) {
       return current.accessToken;
     }
     return this.loginGateway(userId);
@@ -29,27 +37,33 @@ export class GatewayService {
 
   async loginGateway(userId: string) {
     const account = await this.gatewayAccounts.findOne({ where: { userId } });
+    const user = await this.getUser(userId);
+    const isDemo = user?.email === 'admin@demo.com';
+    const defaultDocument = this.config.get<string>('GATEWAY_DOCUMENT');
+    const defaultPassword = this.config.get<string>('GATEWAY_PASSWORD');
     
     let document = account?.document;
     let password = account?.password;
 
-    // Fallback to env default credentials only if account has no credentials set AND env credentials exist
-    if (!document || !password) {
-      document = this.config.get<string>('GATEWAY_DOCUMENT');
-      password = this.config.get<string>('GATEWAY_PASSWORD');
+    if (account && !isDemo && this.matchesDefaultCredentials(account, defaultDocument, defaultPassword)) {
+      await this.gatewayAccounts.update({ id: account.id }, {
+        document: null,
+        password: null,
+        customerCode: null,
+        storeKey: null,
+        accessToken: null
+      });
+      document = undefined;
+      password = undefined;
     }
 
-    // If still no credentials or user is custom and hasn't configured credentials, require user credentials
-    if (account && (!account.document || !account.password)) {
-      // Check if user is demo user or if custom credentials were provided
-      const user = await this.gatewayAccounts.manager.findOne('User' as any, { where: { id: userId } }) as any;
-      if (user && user.email !== 'admin@demo.com') {
-        throw new InternalServerErrorException('Configure suas credenciais do Gateway no final da página para visualizar seu saldo e transações.');
-      }
+    if (isDemo && (!document || !password)) {
+      document = defaultDocument;
+      password = defaultPassword;
     }
 
     if (!document || !password) {
-      throw new InternalServerErrorException('Credenciais do gateway não configuradas para esta conta');
+      throw new InternalServerErrorException('Configure suas credenciais do Gateway no final da página para visualizar seu saldo e transações.');
     }
 
     const { data } = await this.gatewayRequest(() =>
@@ -89,11 +103,12 @@ export class GatewayService {
 
   async getCredentials(userId: string) {
     const account = await this.gatewayAccounts.findOne({ where: { userId } });
-    const user = await this.gatewayAccounts.manager.findOne('User' as any, { where: { id: userId } }) as any;
+    const user = await this.getUser(userId);
     const isDemo = user?.email === 'admin@demo.com';
-    const isConfigured = Boolean(account?.document || (isDemo && this.config.get('GATEWAY_DOCUMENT')));
+    const isDefaultForNonDemo = account ? await this.isDefaultAccountForNonDemoUser(userId, account) : false;
+    const isConfigured = Boolean(!isDefaultForNonDemo && (account?.document || (isDemo && this.config.get('GATEWAY_DOCUMENT'))));
     return {
-      document: account?.document ? `${account.document.substring(0, 3)}***` : (isDemo ? 'Configurado (padrão demo)' : ''),
+      document: account?.document && !isDefaultForNonDemo ? `${account.document.substring(0, 3)}***` : (isDemo ? 'Configurado (padrão demo)' : ''),
       isConfigured
     };
   }
@@ -202,6 +217,29 @@ export class GatewayService {
     if (!(error instanceof BadGatewayException)) return false;
     const response = error.getResponse() as { gatewayStatus?: number };
     return response.gatewayStatus === 401;
+  }
+
+  private async getUser(userId: string) {
+    return this.gatewayAccounts.manager.findOne('User' as any, { where: { id: userId } }) as Promise<{ email?: string } | null>;
+  }
+
+  private async isDefaultAccountForNonDemoUser(userId: string, account: GatewayAccount) {
+    const user = await this.getUser(userId);
+    return user?.email !== 'admin@demo.com'
+      && this.matchesDefaultCredentials(
+        account,
+        this.config.get<string>('GATEWAY_DOCUMENT'),
+        this.config.get<string>('GATEWAY_PASSWORD')
+      );
+  }
+
+  private matchesDefaultCredentials(account: GatewayAccount, defaultDocument?: string, defaultPassword?: string) {
+    return Boolean(
+      defaultDocument
+      && defaultPassword
+      && account.document === defaultDocument
+      && account.password === defaultPassword
+    );
   }
 
   private async gatewayRequest<T>(request: () => Promise<T>): Promise<T> {

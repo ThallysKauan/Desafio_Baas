@@ -9,16 +9,16 @@ export class GatewayAccount {
   userId: string;
 
   @Column({ nullable: true })
-  document: string;
+  document: string | null;
 
   @Column({ nullable: true })
-  password: string;
+  password: string | null;
 
   @Column({ nullable: true })
-  customerCode: string;
+  customerCode: string | null;
 
   @Column({ nullable: true })
-  storeKey: string;
+  storeKey: string | null;
 
   @Column({ type: 'text', nullable: true })
   accessToken: string | null;
