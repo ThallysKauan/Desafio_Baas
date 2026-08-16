@@ -72,6 +72,7 @@ function statusLabel(status?: string) {
 
 function walletValue(wallet: Record<string, unknown> | null) {
   if (!wallet) return 'Indisponivel';
+  if (wallet.error) return 'Indisponivel';
   const candidate = wallet.balance ?? wallet.balanceCents ?? wallet.amount ?? wallet.availableBalance;
   return typeof candidate === 'number' ? money(candidate) : 'Conectado';
 }
@@ -240,14 +241,23 @@ function App() {
       const query = new URLSearchParams({ limit: String(transactionFilters.limit) });
       if (transactionFilters.status) query.set('status', transactionFilters.status);
       if (transactionFilters.type) query.set('type', transactionFilters.type);
-      const [checkoutData, walletData, transactionData, webhookData, withdrawalData, credsData] = await Promise.all([
+      const [checkoutData, withdrawalData, credsData] = await Promise.all([
         request('/checkout-links', { headers }),
-        request('/wallet', { headers }).catch((error) => ({ error: error.message })),
-        request(`/wallet/transactions?${query}`, { headers }).catch(() => []),
-        request('/gateway/webhooks', { headers }).catch(() => []),
         request('/withdrawals', { headers }).catch(() => []),
         request('/gateway/credentials', { headers }).catch(() => null)
       ]);
+
+      const hasGatewayCredentials = Boolean(credsData?.isConfigured);
+      const [walletData, transactionData, webhookData] = hasGatewayCredentials ? await Promise.all([
+        request('/wallet', { headers }).catch((error) => ({ error: error.message })),
+        request(`/wallet/transactions?${query}`, { headers }).catch(() => []),
+        request('/gateway/webhooks', { headers }).catch(() => [])
+      ]) : [
+        { balanceCents: 0 },
+        [],
+        []
+      ];
+
       setCheckouts(checkoutData);
       setWallet(walletData);
       setTransactions(Array.isArray(transactionData) ? transactionData : transactionData.items || []);
